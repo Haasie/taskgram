@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-server
+.env
+*.log
+.DS_Store
+data/
+test-results/
+playwright-report/
+
+# Local orchestration state
+.paseo-autopilot/

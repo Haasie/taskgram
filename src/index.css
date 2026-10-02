@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, sans-serif;
+  --animate-fade: fade 150ms ease-out;
+  --animate-sheet: sheet 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  @keyframes fade {
+    from { opacity: 0; }
+  }
+  @keyframes sheet {
+    from { opacity: 0; transform: translateY(12px); }
+  }
+}
+
+:root {
+  --surface: #ffffff;
+  color-scheme: light dark;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --surface: #18181b; }
+}
+
+html, body {
+  background: var(--surface);
+  @apply text-zinc-900 antialiased dark:text-zinc-100;
+  overscroll-behavior-y: none;
+}
+
+@layer components {
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700;
+  }
+  .chip-active {
+    @apply bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300;
+  }
+  .tag {
+    @apply rounded-full border border-zinc-200 px-1.5 text-[11px] leading-4 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400;
+  }
+  .badge {
+    @apply shrink-0 rounded bg-zinc-100 px-1 text-[11px] font-medium text-zinc-500 dark:bg-zinc-800;
+  }
+  .icon-btn {
+    @apply grid size-8 place-items-center rounded-md hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200;
+  }
+  .btn {
+    @apply rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800;
+  }
+  .btn-primary {
+    @apply bg-sky-500 text-white hover:bg-sky-600 dark:hover:bg-sky-600;
+  }
+  .input {
+    @apply w-full rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm outline-none focus:border-sky-400 dark:border-zinc-700;
+  }
+  .field {
+    @apply flex flex-col gap-1;
+  }
+  .section-label {
+    @apply text-[11px] font-semibold uppercase tracking-wide text-zinc-400;
+  }
+  .menu-item {
+    @apply flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700;
+  }
+}

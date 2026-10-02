@@ -1,0 +1,25 @@
+# Minimal self-hosted setup. Copy .env.example to .env, fill it in, then:
+#   docker compose up -d
+# Put a TLS-terminating reverse proxy (Caddy, Traefik, nginx, …) in front of port 3000;
+# browsers only allow service workers, offline mode and push notifications over HTTPS.
+services:
+  taskgram:
+    image: ghcr.io/OWNER/taskgram:latest   # or: build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - taskgram-data:/app/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  taskgram-data: {}
