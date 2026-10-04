@@ -374,3 +374,15 @@ test('E10: Language switching and password login UI', async ({ page }) => {
   // Main app restored
   await expect(page.getByRole('button', { name: /Today/ })).toBeVisible();
 });
+
+test('E11: Update notice when a new service worker takes over', async ({ page }) => {
+  await page.goto('/#/inbox');
+  await waitForSw(page);
+  // Herladen zodat de service worker deze pagina beheert (zoals bij een terugkerende gebruiker).
+  await page.reload();
+  await waitForSw(page);
+  await expect(page.getByText('Inbox taak 1')).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
+  await expect(page.getByText('Er is een nieuwe versie van de app.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Vernieuwen' })).toBeVisible();
+});

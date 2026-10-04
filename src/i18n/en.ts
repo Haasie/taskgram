@@ -292,5 +292,11 @@ export const en: Record<keyof typeof nl, string> = {
 
   // Sections
   'section.thisEvening': 'This Evening',
-  'section.scheduledUndated': 'Scheduled without date'
+  'section.scheduledUndated': 'Scheduled without date',
+  'update.available': 'A new version of the app is available.',
+  'update.reload': 'Reload',
+  'recover.message': 'The app could not be loaded. Recovering clears the offline copy of your lists and loads the latest version; changes that have not been synced yet are kept.',
+  'recover.action': 'Recover app',
+  'recover.busy': 'Recovering…',
+  'recover.reload': 'Reload',
 };

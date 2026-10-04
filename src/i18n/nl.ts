@@ -290,5 +290,11 @@ export const nl = {
 
   // Sections
   'section.thisEvening': 'Vanavond',
-  'section.scheduledUndated': 'Gepland zonder datum'
+  'section.scheduledUndated': 'Gepland zonder datum',
+  'update.available': 'Er is een nieuwe versie van de app.',
+  'update.reload': 'Vernieuwen',
+  'recover.message': 'De app kon niet worden geladen. Herstellen wist de offline kopie van je lijsten en laadt de nieuwste versie; wijzigingen die nog niet gesynchroniseerd zijn blijven bewaard.',
+  'recover.action': 'App herstellen',
+  'recover.busy': 'Herstellen…',
+  'recover.reload': 'Opnieuw laden',
 } as const;

@@ -15,7 +15,8 @@ export const persister = createAsyncStoragePersister({
 export const persistOptions: PersistQueryClientProviderProps['persistOptions'] = {
   persister,
   maxAge: 30 * 24 * 3600 * 1000,
-  buster: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0',
+  // Per build vernieuwd: een nieuwe versie leest nooit offline gegevens in een oud formaat.
+  buster: typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : 'dev',
   dehydrateOptions: {
     shouldDehydrateQuery: (q) => ['tasks', 'projects', 'me', 'logbook'].includes(String(q.queryKey[0]))
   }
