@@ -1,6 +1,6 @@
 # Taskgram
 
-A Things 3-style task app for [Postgram](https://github.com/ivotoby/postgram) — fast, keyboard-friendly
+A Things 3-style task app for [Postgram](https://github.com/ivo-toby/postgram) — fast, keyboard-friendly
 on the desktop, installable on your phone, and usable offline. Postgram stays the source of truth:
 Taskgram only reads and writes tasks through the Postgram API.
 
