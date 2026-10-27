@@ -10,6 +10,11 @@ export const sortOrder = (t: Task) =>
   typeof t.metadata.sort_order === 'number' ? t.metadata.sort_order : -Date.parse(t.createdAt) / 1000;
 export const completedAt = (t: Task) =>
   typeof t.metadata.completed_at === 'string' ? t.metadata.completed_at : t.updatedAt;
+export const priority = (t: Task) =>
+  typeof t.metadata.priority === 'number' && t.metadata.priority >= 1 && t.metadata.priority <= 5 ? t.metadata.priority : 0;
+export const percentDone = (t: Task) =>
+  typeof t.metadata.percent_done === 'number' ? Math.max(0, Math.min(100, t.metadata.percent_done)) : 0;
+export const isFavorite = (t: Task) => t.metadata.favorite === true;
 export const isOpen = (t: Task) => t.status !== 'done' && t.status !== 'archived';
 
 export function isToday(t: Task, today: string): boolean {

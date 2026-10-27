@@ -14,6 +14,11 @@ Taskgram only reads and writes tasks through the Postgram API.
   swipe gestures on mobile.
 - **Tasks with detail** — notes, checklists, tags, start date, deadline, reminders, and links to other
   Postgram knowledge (search and link memories, people, documents).
+- **Vikunja-style power features** — priorities (low … do now), progress percentage, favorites, a kanban
+  board per project, saved filters (labels, priority, project, area, deadline, sorting), task relations
+  (blocked by, subtask of, depends on, duplicate of, related), duplicating tasks and Quick Add Magic:
+  type `Call supplier +renovation *phone !4 tomorrow` to set project, label, priority and date at once
+  (dates are only picked up at the end of the title, e.g. `… tomorrow` or `… due friday`).
 - **Recurring tasks** — daily, weekly on chosen days, monthly, or N days/weeks after completion.
   Completing one creates exactly one next occurrence; undo removes it again.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
@@ -54,6 +59,12 @@ allows task operations (plus read-only knowledge search for linking).
 | Project | a Postgram `project` entity; the task gets `metadata.project_id` and a `part_of` edge |
 | Area | `visibility` (`work`, `personal`, `shared`) |
 | Notes | everything after the first line of `content` |
+| Priority | `metadata.priority` (1 low … 5 do now) |
+| Progress | `metadata.percent_done` (0–100) |
+| Favorite | `metadata.favorite` |
+| Task relations | Postgram edges between tasks (`blocked_by`, `part_of`, `depends_on`, `duplicates`, `related_to`) |
+| Board column | derived from `status` (inbox, next/active/scheduled, waiting, someday, done) |
+| Saved filters | stored per device in the browser (`localStorage`) |
 | Context | `metadata.context` plus linked Postgram entities (edges) |
 
 ## Getting started

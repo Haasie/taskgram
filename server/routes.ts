@@ -48,7 +48,10 @@ const metadataPatch = z
     sort_order: z.number().finite().nullable(),
     completed_at: z.string().max(40).nullable(),
     recurrence: recurrenceSchema.nullable(),
-    reminder_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable()
+    reminder_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
+    priority: z.number().int().min(0).max(5).nullable(),
+    percent_done: z.number().int().min(0).max(100).nullable(),
+    favorite: z.boolean().nullable()
   })
   .partial()
   .strict();
@@ -225,6 +228,8 @@ export function createApiRoutes(pg: PostgramClient, opts?: { timeZone?: string; 
           reminder_time: (cur.metadata?.reminder_time as string | null | undefined) ?? null,
           context: (cur.metadata?.context as string | null | undefined) ?? null,
           evening: (cur.metadata?.evening as boolean | null | undefined) ?? null,
+          priority: (cur.metadata?.priority as number | null | undefined) ?? null,
+          favorite: (cur.metadata?.favorite as boolean | null | undefined) ?? null,
           project_id: (cur.metadata?.project_id as string | null | undefined) ?? null,
           checklist: Array.isArray(cur.metadata?.checklist)
             ? cur.metadata.checklist.map((item: any) => ({ ...item, done: false }))

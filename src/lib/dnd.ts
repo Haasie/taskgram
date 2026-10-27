@@ -23,6 +23,7 @@ export function dropPatch(
     return { ...patch, visibility: area, metadata: { ...patch.metadata, project_id: null } };
   }
   if (target === 'logbook') return 'complete';
+  if (target === 'favorites') return { metadata: { favorite: true } };
   if (target === 'upcoming') return 'pick-date';
 
   if (target === 'today') return whenPatch({ kind: 'today' });

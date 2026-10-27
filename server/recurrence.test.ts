@@ -416,4 +416,39 @@ describe('server recurrence and lifecycle (T2)', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/');
   });
+
+  it('(i) accepts priority, progress and favorite and carries priority/favorite (not progress) to the successor', async () => {
+    const created = await app.request('/api/tasks', {
+      method: 'POST',
+      headers: authedHeaders,
+      body: JSON.stringify({
+        content: 'Daily standup',
+        status: 'next',
+        metadata: { priority: 4, percent_done: 50, favorite: true, recurrence: { type: 'daily', interval: 1 } }
+      })
+    });
+    expect(created.status).toBe(201);
+    const { task } = await created.json();
+
+    const res = await app.request(`/api/tasks/${task.id}/complete`, {
+      method: 'POST',
+      headers: authedHeaders,
+      body: JSON.stringify({ version: task.version })
+    });
+    const data = await res.json();
+    expect(data.next.metadata.priority).toBe(4);
+    expect(data.next.metadata.favorite).toBe(true);
+    expect(data.next.metadata.percent_done).toBeUndefined();
+  });
+
+  it('(j) rejects out-of-range priority and progress', async () => {
+    for (const metadata of [{ priority: 6 }, { priority: 1.5 }, { percent_done: 101 }, { favorite: 'yes' }]) {
+      const res = await app.request('/api/tasks', {
+        method: 'POST',
+        headers: authedHeaders,
+        body: JSON.stringify({ content: 'x', metadata })
+      });
+      expect(res.status).toBe(400);
+    }
+  });
 });

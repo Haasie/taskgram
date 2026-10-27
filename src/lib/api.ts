@@ -67,7 +67,8 @@ export const api = {
     request<{ task: Task; removedNextId: string | null }>('POST', `/tasks/${id}/reopen`, { version }),
   deleteTask: (id: string, version: number) => request<unknown>('DELETE', `/tasks/${id}?version=${version}`),
   links: (id: string) => request<{ links: LinkedEntity[] }>('GET', `/tasks/${id}/links`).then((r) => r.links),
-  addLink: (id: string, targetId: string) => request<unknown>('POST', `/tasks/${id}/links`, { target_id: targetId }),
+  addLink: (id: string, targetId: string, relation = 'related_to') =>
+    request<unknown>('POST', `/tasks/${id}/links`, { target_id: targetId, relation }),
   removeLink: (id: string, edgeId: string) => request<unknown>('DELETE', `/tasks/${id}/links/${edgeId}`),
   search: (query: string) => request<{ hits: SearchHit[] }>('POST', '/search', { query }).then((r) => r.hits),
   projects: () => request<{ items: Project[] }>('GET', '/projects').then((r) => r.items),

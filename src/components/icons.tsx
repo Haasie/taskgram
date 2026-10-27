@@ -1,4 +1,4 @@
-import { Archive, BookCheck, CalendarDays, Hourglass, Inbox, Layers, Moon, Star, type LucideIcon } from 'lucide-react';
+import { Archive, BookCheck, CalendarDays, Filter, Heart, Hourglass, Inbox, Layers, Moon, Star, type LucideIcon } from 'lucide-react';
 import type { ListKind } from '../lib/lists';
 import { t } from '../i18n/index.js';
 
@@ -10,6 +10,11 @@ export const LIST_META: Record<ListKind, { readonly label: string; Icon: LucideI
   someday: { get label() { return t('list.someday'); }, Icon: Archive, color: 'text-amber-700/70 dark:text-amber-300/70' },
   waiting: { get label() { return t('list.waiting'); }, Icon: Hourglass, color: 'text-violet-500' },
   logbook: { get label() { return t('list.logbook'); }, Icon: BookCheck, color: 'text-emerald-500' }
+};
+
+export const EXTRA_META: Record<'favorites' | 'filter', { readonly label: string; Icon: LucideIcon; color: string }> = {
+  favorites: { get label() { return t('list.favorites'); }, Icon: Heart, color: 'text-rose-400' },
+  filter: { get label() { return t('list.filter'); }, Icon: Filter, color: 'text-indigo-500' }
 };
 
 export const EveningIcon = Moon;

@@ -13,21 +13,24 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import { useQuery } from '@tanstack/react-query';
-import { Box, CheckCircle2, ChevronLeft, Keyboard, MoreHorizontal, Plus, Archive as ArchiveIcon, Settings } from 'lucide-react';
+import { Box, CheckCircle2, ChevronLeft, Columns3, Keyboard, List as ListIcon, MoreHorizontal, Plus, Archive as ArchiveIcon, Settings } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Project, Task, Visibility } from '../shared/types.js';
 import { api } from './lib/api';
 import { formatLong, formatMonth, todayISO } from '../shared/dates.js';
-import { isOpen, projectId, sortOrder } from '../shared/taskFields.js';
+import { isFavorite, isOpen, priority, projectId, sortOrder } from '../shared/taskFields.js';
+import { boardColumn, projectLayout, setProjectLayout, type BoardColumn } from './lib/filters';
 import { dropPatch } from './lib/dnd';
 import { AREAS, buildSections, orderBetween, type ListKind, type Section, type View } from './lib/lists';
 import { completeTask, createProject, onTaskIdRewritten, reopenTask, updateProject, updateTask, useProjects, useTasks, deleteTask } from './lib/queries';
+import { Board } from './components/Board';
+import { FilterBar } from './components/FilterBar';
 import { splitContent } from './lib/task';
 import { showToast } from './lib/toast';
 import { useSyncStatus } from './lib/sync';
 import { useHashRoute, useMediaQuery, type Route } from './lib/useHashView';
 import { whenPatch, type WhenChoice } from './lib/when';
-import { LIST_META } from './components/icons';
+import { EXTRA_META, LIST_META } from './components/icons';
 import { ListView } from './components/ListView';
 import { Logbook } from './components/Logbook';
 import { Modal } from './components/Modal';
@@ -114,14 +117,24 @@ export function App() {
   }, [isDesktop, route.kind, navigate]);
 
   const view: View | null = route.kind === 'home' ? null : route;
-  const viewKey = view ? JSON.stringify(view) : 'home';
+  // Filterwijzigingen veranderen de query; dat is geen nieuwe weergave.
+  const viewKey = view ? JSON.stringify(view.kind === 'filter' ? { kind: 'filter', savedId: view.savedId } : view) : 'home';
+  const [layout, setLayout] = useState<'list' | 'board'>('list');
   useEffect(() => {
     setSelectedId(null);
     setExpandedId(null);
+    setLayout(view?.kind === 'project' ? projectLayout(view.id) : 'list');
     window.scrollTo(0, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewKey]);
+  const changeLayout = (next: 'list' | 'board') => {
+    if (view?.kind !== 'project') return;
+    setProjectLayout(view.id, next);
+    setLayout(next);
+  };
 
   const projectsById = useMemo(() => new Map(allProjects.map((p) => [p.id, p])), [allProjects]);
+  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => t.tags))].sort(), [tasks]);
 
   const sections: Section[] = useMemo(
@@ -136,25 +149,6 @@ export function App() {
   }, []);
 
   const applyWhen = useCallback((task: Task, choice: WhenChoice) => void updateTask(task, whenPatch(choice, todayISO())), []);
-
-  const ui: Ui = useMemo(
-    () => ({
-      today,
-      projects,
-      projectsById,
-      allTags,
-      selectedId,
-      expandedId,
-      select: setSelectedId,
-      expand: (id) => {
-        setExpandedId(id);
-        if (id) setSelectedId(id);
-      },
-      openPicker: setPicker,
-      complete
-    }),
-    [today, projects, projectsById, allTags, selectedId, expandedId, complete]
-  );
 
   const entryDefaults = useCallback((): QuickEntryDefaults => {
     if (!view) return {};
@@ -171,6 +165,8 @@ export function App() {
         return { when: { kind: 'anytime' }, projectId: view.id };
       case 'area':
         return { when: { kind: 'anytime' }, visibility: view.area };
+      case 'favorites':
+        return { when: { kind: 'anytime' } };
       default:
         return {};
     }
@@ -189,6 +185,27 @@ export function App() {
       }, 50);
     },
     [navigate, projectsById]
+  );
+
+  const ui: Ui = useMemo(
+    () => ({
+      today,
+      projects,
+      projectsById,
+      tasksById,
+      allTags,
+      selectedId,
+      expandedId,
+      select: setSelectedId,
+      expand: (id) => {
+        setExpandedId(id);
+        if (id) setSelectedId(id);
+      },
+      openPicker: setPicker,
+      complete,
+      openTask
+    }),
+    [today, projects, projectsById, tasksById, allTags, selectedId, expandedId, complete, openTask]
   );
 
   const newProject = useCallback(
@@ -276,6 +293,10 @@ export function App() {
           return setPicker({ task: selected, mode: 'when' });
         case 'd':
           return setPicker({ task: selected, mode: 'deadline' });
+        case 'f':
+          return void updateTask(selected, { metadata: { favorite: isFavorite(selected) ? null : true } });
+        case 'p':
+          return void updateTask(selected, { metadata: { priority: (priority(selected) + 1) % 6 || null } });
         case 'Backspace':
         case 'Delete':
           if (window.confirm(t('task.deleteConfirm', { title: splitContent(selected.content).title }))) {
@@ -302,11 +323,21 @@ export function App() {
     if (projectsById.has(key)) return void updateTask(task, { metadata: { project_id: key } });
   };
 
+  const moveToColumn = (task: Task, column: BoardColumn) => {
+    if (boardColumn(task) === column) return;
+    if (column === 'done') return complete(task);
+    if (task.status === 'done') return void reopenTask(task.id);
+    const kind = column === 'todo' ? 'anytime' : column;
+    return applyWhen(task, { kind });
+  };
+
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setDragging(null);
     const task = active.data.current?.task as Task | undefined;
     if (!task || !over || over.id === active.id) return;
     const overId = String(over.id);
+
+    if (overId.startsWith('drop:board:')) return moveToColumn(task, overId.slice(11) as BoardColumn);
 
     if (overId.startsWith('drop:')) {
       const target = overId.slice(5);
@@ -357,7 +388,29 @@ export function App() {
     if (!view) return null;
     if (view.kind === 'project') {
       const project = projectsById.get(view.id);
-      return project ? <ProjectHeader project={project} onDone={() => navigate({ kind: 'anytime' })} /> : <ViewTitle icon={<Box size={26} className="text-zinc-400" />} title={t('quickFind.project')} />;
+      return project ? (
+        <ProjectHeader project={project} layout={layout} onLayout={changeLayout} onDone={() => navigate({ kind: 'anytime' })} />
+      ) : (
+        <ViewTitle icon={<Box size={26} className="text-zinc-400" />} title={t('quickFind.project')} />
+      );
+    }
+    if (view.kind === 'favorites' || view.kind === 'filter') {
+      const { label, Icon, color } = EXTRA_META[view.kind];
+      return (
+        <>
+          <ViewTitle icon={<Icon size={26} className={`${color} ${view.kind === 'favorites' ? 'fill-rose-400' : ''}`} />} title={label} />
+          {view.kind === 'filter' && (
+            <FilterBar
+              query={view.query}
+              savedId={view.savedId}
+              count={ordered.length}
+              allTags={allTags}
+              projects={projects}
+              onChange={(query, savedId, opts) => navigate({ kind: 'filter', query, ...(savedId ? { savedId } : {}) }, opts)}
+            />
+          )}
+        </>
+      );
     }
     if (view.kind === 'area') {
       return <ViewTitle icon={<Box size={26} className="text-zinc-400" />} title={AREAS.find((a) => a.id === view.area)?.label ?? ''} />;
@@ -369,6 +422,8 @@ export function App() {
   const emptyTextForView = (v: View): string => {
     if (v.kind === 'project') return t('empty.project');
     if (v.kind === 'area') return t('empty.area');
+    if (v.kind === 'favorites') return t('empty.favorites');
+    if (v.kind === 'filter') return t('empty.filter');
     switch (v.kind) {
       case 'inbox': return t('empty.inbox');
       case 'today': return t('empty.today');
@@ -395,6 +450,15 @@ export function App() {
     }
     if (!view) return null;
     if (view.kind === 'logbook') return <Logbook header={header} />;
+    if (view.kind === 'project' && layout === 'board') {
+      return (
+        <Board
+          header={header}
+          tasks={tasks.filter((task) => projectId(task) === view.id)}
+          renderRow={(task) => <TaskRow key={task.id} task={task} showWhen />}
+        />
+      );
+    }
     const areaProjects = view.kind === 'area' ? projects.filter((p) => p.visibility === view.area && p.status !== 'done') : [];
     return (
       <ListView
@@ -545,7 +609,17 @@ function ViewTitle({ icon, title, children }: { icon: React.ReactNode; title: st
   );
 }
 
-function ProjectHeader({ project, onDone }: { project: Project; onDone: () => void }) {
+function ProjectHeader({
+  project,
+  layout,
+  onLayout,
+  onDone
+}: {
+  project: Project;
+  layout: 'list' | 'board';
+  onLayout: (layout: 'list' | 'board') => void;
+  onDone: () => void;
+}) {
   const { online } = useSyncStatus();
   const [title, setTitle] = useState(projectTitle(project));
   const [menu, setMenu] = useState(false);
@@ -574,6 +648,24 @@ function ProjectHeader({ project, onDone }: { project: Project; onDone: () => vo
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
           className="min-w-0 flex-1 bg-transparent text-[26px] font-bold tracking-tight outline-none disabled:opacity-50"
         />
+        <div className="flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800" role="group">
+          {(['list', 'board'] as const).map((l) => {
+            const Icon = l === 'list' ? ListIcon : Columns3;
+            return (
+              <button
+                key={l}
+                type="button"
+                aria-pressed={layout === l}
+                title={t(l === 'list' ? 'board.list' : 'board.board')}
+                aria-label={t(l === 'list' ? 'board.list' : 'board.board')}
+                onClick={() => onLayout(l)}
+                className={`rounded-md p-1.5 ${layout === l ? 'bg-white shadow-sm dark:bg-zinc-700' : 'text-zinc-400'}`}
+              >
+                <Icon size={16} />
+              </button>
+            );
+          })}
+        </div>
         <div className="relative">
           <button type="button" className="icon-btn" onClick={() => setMenu((m) => !m)} aria-label={t('project.menu')}>
             <MoreHorizontal size={20} />
@@ -637,6 +729,8 @@ function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void })
     ['s', t('when.someday')],
     ['w', t('task.whenDots')],
     ['d', t('task.deadlineDots')],
+    ['f', t('shortcuts.favorite')],
+    ['p', t('shortcuts.priority')],
     ['⌫', t('shortcuts.delete')],
     ['1 – 7', t('shortcuts.listsRange')]
   ];

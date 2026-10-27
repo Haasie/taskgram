@@ -7,6 +7,7 @@ export type Ui = {
   today: string;
   projects: Project[];
   projectsById: Map<string, Project>;
+  tasksById: Map<string, Task>;
   allTags: string[];
   selectedId: string | null;
   expandedId: string | null;
@@ -14,6 +15,7 @@ export type Ui = {
   expand: (id: string | null) => void;
   openPicker: (state: NonNullable<PickerState>) => void;
   complete: (task: Task) => void;
+  openTask: (task: Task) => void;
 };
 
 export const UiContext = createContext<Ui | null>(null);

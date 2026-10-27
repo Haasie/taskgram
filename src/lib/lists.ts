@@ -1,6 +1,7 @@
 import type { Project, Task, Visibility } from '../../shared/types.js';
 import { addDays, daysBetween } from '../../shared/dates.js';
-import { deadline, isEvening, isOpen, isToday, projectId, sortOrder, startDate } from '../../shared/taskFields.js';
+import { deadline, isEvening, isFavorite, isOpen, isToday, projectId, sortOrder, startDate } from '../../shared/taskFields.js';
+import { matchesFilter, queryToFilter, sortTasks } from './filters';
 import { t } from '../i18n/index.js';
 
 export type ListKind = 'inbox' | 'today' | 'upcoming' | 'anytime' | 'someday' | 'waiting' | 'logbook';
@@ -8,7 +9,9 @@ export type ListKind = 'inbox' | 'today' | 'upcoming' | 'anytime' | 'someday' | 
 export type View =
   | { kind: ListKind }
   | { kind: 'project'; id: string }
-  | { kind: 'area'; area: Visibility };
+  | { kind: 'area'; area: Visibility }
+  | { kind: 'favorites' }
+  | { kind: 'filter'; query: string; savedId?: string };
 
 export type Section = { key: string; title?: string; tone?: 'evening' | 'overdue'; tasks: Task[] };
 
@@ -91,6 +94,15 @@ export function buildSections(
 
   if (view.kind === 'project') {
     return [{ key: 'project', tasks: open.filter((t) => projectId(t) === view.id) }];
+  }
+
+  if (view.kind === 'favorites') {
+    return [{ key: 'favorites', tasks: open.filter(isFavorite) }];
+  }
+
+  if (view.kind === 'filter') {
+    const filter = queryToFilter(view.query);
+    return [{ key: 'filter', tasks: sortTasks(open.filter((t) => matchesFilter(t, filter, today)), filter.sort) }];
   }
 
   if (view.kind === 'area') {

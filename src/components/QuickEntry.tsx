@@ -1,10 +1,12 @@
-import { CalendarDays, Flag, Moon, Star, Archive, Inbox } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CalendarDays, Flag, Moon, Star, Archive, Inbox, Sparkles } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Visibility } from '../../shared/types.js';
 import { formatShort, todayISO } from '../../shared/dates.js';
 import { AREAS } from '../lib/lists';
 import { createTask } from '../lib/queries';
 import { joinContent } from '../lib/task';
+import { parseQuickAdd } from '../lib/quickAdd';
+import { PriorityBadge, PrioritySelect } from './Priority';
 import { whenPatch, type WhenChoice } from '../lib/when';
 import { Calendar } from './Calendar';
 import { Modal } from './Modal';
@@ -24,6 +26,7 @@ export function QuickEntry({ open, defaults, onClose }: { open: boolean; default
   const [due, setDue] = useState<string | null>(null);
   const [projectId, setProjectId] = useState(defaults.projectId ?? '');
   const [visibility, setVisibility] = useState<Visibility>(defaults.visibility ?? 'personal');
+  const [priority, setPriority] = useState(0);
   const [calendar, setCalendar] = useState<'when' | 'deadline' | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -41,27 +44,42 @@ export function QuickEntry({ open, defaults, onClose }: { open: boolean; default
     setNotes('');
     setTags([]);
     setDue(null);
+    setPriority(0);
     setCalendar(null);
     setWhen(defaults.when ?? { kind: 'inbox' });
     setProjectId(defaults.projectId ?? '');
     setVisibility(defaults.projectId ? ui.projectsById.get(defaults.projectId)?.visibility ?? 'personal' : defaults.visibility ?? 'personal');
   }, [open, defaults, ui.projectsById]);
 
+  const magic = useMemo(
+    () => parseQuickAdd(title, { today: ui.today, projects: ui.projects.map((p) => ({ id: p.id, title: projectTitle(p) })) }),
+    [title, ui.today, ui.projects]
+  );
+  const magicProject = magic.projectId ? ui.projectsById.get(magic.projectId) : undefined;
+  const hasMagic = magic.tags.length > 0 || magic.projectId || magic.priority || magic.when || magic.due;
+
   const submit = async (keepOpen = false) => {
     if (!title.trim() || saving) return;
     setSaving(true);
+    // Quick Add Magic gaat voor de standaardwaarden van de huidige lijst.
+    const pid = magic.projectId ?? projectId;
+    const area = magicProject?.visibility ?? visibility;
+    const chosen = magic.when ?? when;
     // Een taak in een project of met datum hoort niet meer in de Inbox.
-    const effective: WhenChoice = when.kind === 'inbox' && projectId ? { kind: 'anytime' } : when;
+    const effective: WhenChoice = chosen.kind === 'inbox' && pid ? { kind: 'anytime' } : chosen;
     const patch = whenPatch(effective, todayISO());
+    const deadlineDate = magic.due ?? due;
+    const prio = magic.priority ?? priority;
     const task = await createTask({
-      content: joinContent(title, notes),
+      content: joinContent(magic.title || title, notes),
       status: patch.status,
-      tags,
-      visibility,
+      tags: [...new Set([...tags, ...magic.tags])],
+      visibility: area,
       metadata: {
         ...patch.metadata,
-        ...(due ? { due_date: due } : {}),
-        ...(projectId ? { project_id: projectId } : {})
+        ...(deadlineDate ? { due_date: deadlineDate } : {}),
+        ...(pid ? { project_id: pid } : {}),
+        ...(prio ? { priority: prio } : {})
       }
     });
     setSaving(false);
@@ -97,6 +115,30 @@ export function QuickEntry({ open, defaults, onClose }: { open: boolean; default
             }
           }}
         />
+        {hasMagic ? (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500" data-testid="quick-add-magic">
+            <Sparkles size={13} className="text-violet-500" />
+            {magic.tags.map((tag) => (
+              <span key={tag} className="tag">
+                {tag}
+              </span>
+            ))}
+            {magicProject && <span className="chip">{projectTitle(magicProject)}</span>}
+            {magic.priority && <PriorityBadge priority={magic.priority} always />}
+            {magic.when && (
+              <span className="chip">
+                {magic.when.kind === 'date' ? formatShort(magic.when.date, ui.today) : whenOptions.find((o) => o.choice.kind === magic.when!.kind)?.label}
+              </span>
+            )}
+            {magic.due && (
+              <span className="chip">
+                <Flag size={12} /> {formatShort(magic.due, ui.today)}
+              </span>
+            )}
+          </div>
+        ) : (
+          !title && <p className="text-xs text-zinc-400">{t('quickEntry.magicHint')}</p>
+        )}
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('task.notesPlaceholder')} rows={2} className="w-full resize-none bg-transparent text-sm outline-none" />
         <TagEditor tags={tags} allTags={ui.allTags} onChange={setTags} />
 
@@ -132,7 +174,7 @@ export function QuickEntry({ open, defaults, onClose }: { open: boolean; default
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <select
             value={projectId}
             onChange={(e) => {
@@ -159,6 +201,7 @@ export function QuickEntry({ open, defaults, onClose }: { open: boolean; default
               </option>
             ))}
           </select>
+          <PrioritySelect value={priority} onChange={setPriority} />
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-1">

@@ -1,11 +1,12 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Bell, Check, Flag, ListChecks, Moon, Repeat, StickyNote, Star } from 'lucide-react';
+import { Bell, Check, Flag, Heart, ListChecks, Moon, Repeat, StickyNote, Star } from 'lucide-react';
 import { memo, useRef, useState, type PointerEvent } from 'react';
 import type { Task } from '../../shared/types.js';
 import { formatDeadline, formatShort } from '../../shared/dates.js';
 import { reopenTask } from '../lib/queries';
-import { checklist, deadline, isEvening, projectId, startDate } from '../../shared/taskFields.js';
+import { checklist, deadline, isEvening, isFavorite, percentDone, priority, projectId, startDate } from '../../shared/taskFields.js';
+import { PriorityBadge } from './Priority';
 import { splitContent } from '../lib/task';
 import { TaskEditor } from './TaskEditor';
 import { projectTitle, useUi } from './UiContext';
@@ -134,7 +135,10 @@ export const TaskRow = memo(function TaskRow({ task, showProject = false, showWh
                 )}
                 {showWhen && start && start > ui.today && <span className="badge mt-0.5">{formatShort(start, ui.today)}</span>}
                 {task.status === 'waiting' && <span className="badge mt-0.5 text-violet-600">{t('task.waitingBadge')}</span>}
+                <PriorityBadge priority={priority(task)} />
                 <span className={`line-clamp-2 text-[15px] leading-snug ${done ? 'text-zinc-400 line-through decoration-zinc-300' : ''}`}>{title || t('task.untitled')}</span>
+                {isFavorite(task) && <Heart size={12} className="mt-1 shrink-0 fill-rose-400 text-rose-400" aria-label={t('task.favorite')} />}
+                {percentDone(task) > 0 && <span className="mt-0.5 shrink-0 text-xs text-zinc-400">{percentDone(task)}%</span>}
                 {task.metadata.reminder_time && <Bell size={12} className="mt-1 shrink-0 text-zinc-300" />}
                 {task.metadata.recurrence && <Repeat size={12} className="mt-1 shrink-0 text-zinc-300" />}
                 {notes && <StickyNote size={12} className="mt-1 shrink-0 text-zinc-300" />}

@@ -1,11 +1,13 @@
 import { useDroppable } from '@dnd-kit/core';
 import { Plus, Search, Box, Settings } from 'lucide-react';
+import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { Project, Task, Visibility } from '../../shared/types.js';
 import { AREAS, countFor, overdueCount, type ListKind } from '../lib/lists';
-import { isOpen, projectId } from '../../shared/taskFields.js';
+import { isFavorite, isOpen, projectId } from '../../shared/taskFields.js';
+import { loadSavedFilters, subscribeSavedFilters } from '../lib/filters';
 import type { Route } from '../lib/useHashView';
-import { LIST_META, ProgressRing } from './icons';
+import { EXTRA_META, LIST_META, ProgressRing } from './icons';
 import { projectTitle } from './UiContext';
 import { useSyncStatus } from '../lib/sync';
 import { SyncIndicator } from './SyncIndicator';
@@ -45,10 +47,14 @@ function Item({ id, active, onClick, icon, label, count, alert }: { id: string; 
 
 const MAIN: ListKind[] = ['inbox', 'today', 'upcoming', 'anytime', 'someday'];
 const EXTRA: ListKind[] = ['waiting', 'logbook'];
+const FavoritesIcon = EXTRA_META.favorites.Icon;
+const FilterIcon = EXTRA_META.filter.Icon;
 
 export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProject, onSearch, onOpenConflicts, onOpenSettings, user }: Props) {
   useLang();
   const { online } = useSyncStatus();
+  const savedFilters = useSyncExternalStore(subscribeSavedFilters, loadSavedFilters);
+  const favorites = tasks.filter((t) => isOpen(t) && isFavorite(t)).length;
 
   const listItem = (kind: ListKind) => {
     const { label, Icon, color } = LIST_META[kind];
@@ -73,7 +79,52 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
         <Search size={15} /> {t('sidebar.quickFind')} <kbd className="ml-auto hidden text-xs md:inline">/</kbd>
       </button>
       <div className="space-y-0.5">{MAIN.map(listItem)}</div>
-      <div className="space-y-0.5">{EXTRA.map(listItem)}</div>
+      <div className="space-y-0.5">
+        {listItem('waiting')}
+        <Item
+          id="favorites"
+          active={route.kind === 'favorites'}
+          onClick={() => onNavigate({ kind: 'favorites' })}
+          icon={<FavoritesIcon size={17} className={`${EXTRA_META.favorites.color} fill-rose-400`} />}
+          label={EXTRA_META.favorites.label}
+          count={favorites || undefined}
+        />
+        {EXTRA.filter((k) => k !== 'waiting').map(listItem)}
+      </div>
+
+      <div className="space-y-0.5">
+        <div className="group flex items-center">
+          <span className="section-label flex-1 px-2.5">{t('filter.saved')}</span>
+          <button
+            type="button"
+            title={t('filter.new')}
+            aria-label={t('filter.new')}
+            onClick={() => onNavigate({ kind: 'filter', query: '' })}
+            className="icon-btn opacity-60 md:opacity-0 md:group-hover:opacity-60"
+          >
+            <Plus size={15} />
+          </button>
+        </div>
+        {savedFilters.map((f) => (
+          <Item
+            key={f.id}
+            id={`filter:${f.id}`}
+            active={route.kind === 'filter' && route.savedId === f.id}
+            onClick={() => onNavigate({ kind: 'filter', query: f.query, savedId: f.id })}
+            icon={<FilterIcon size={16} className={EXTRA_META.filter.color} />}
+            label={f.name}
+          />
+        ))}
+        {savedFilters.length === 0 && (
+          <Item
+            id="filter:new"
+            active={route.kind === 'filter' && !route.savedId}
+            onClick={() => onNavigate({ kind: 'filter', query: '' })}
+            icon={<FilterIcon size={16} className={EXTRA_META.filter.color} />}
+            label={t('filter.new')}
+          />
+        )}
+      </div>
 
       {AREAS.map((area) => {
         const areaProjects = projects.filter((p) => p.visibility === area.id && p.status !== 'done');

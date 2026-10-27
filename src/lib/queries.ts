@@ -227,6 +227,26 @@ export function createTask(input: CreateTaskInput): Task {
   return task;
 }
 
+// Alleen velden die de server bij aanmaken accepteert; overige Postgram-metadata blijft bij het origineel.
+const COPIED_METADATA = ['context', 'due_date', 'start_date', 'evening', 'project_id', 'recurrence', 'reminder_time', 'priority', 'favorite'] as const;
+
+/** Kopie van een taak (zonder herhaalketen of voortgang), zoals Vikunja's "Dupliceren". */
+export function duplicateTask(task: Task, suffix: string): Task {
+  const [first = '', ...rest] = task.content.split('\n');
+  const metadata: Partial<TaskMetadata> = {};
+  for (const key of COPIED_METADATA) if (task.metadata[key] != null) (metadata as Record<string, unknown>)[key] = task.metadata[key];
+  const items = Array.isArray(task.metadata.checklist) ? task.metadata.checklist : [];
+  if (items.length) metadata.checklist = items.map((i) => ({ ...i, id: crypto.randomUUID().slice(0, 8) }));
+  if (typeof task.metadata.sort_order === 'number') metadata.sort_order = task.metadata.sort_order + 0.001;
+  return createTask({
+    content: [`${first} ${suffix}`.trim(), ...rest].join('\n'),
+    status: task.status === 'done' || task.status === 'archived' ? 'next' : task.status,
+    tags: [...task.tags],
+    visibility: task.visibility,
+    metadata
+  });
+}
+
 export function deleteTask(task: Task): Promise<void> {
   setTasks((tasks) => tasks.filter((t) => t.id !== task.id));
   queryClient.setQueryData<{ pages: { items: Task[] }[] }>(['logbook'], (old) =>

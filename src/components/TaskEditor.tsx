@@ -1,11 +1,12 @@
-import { Bell, CalendarDays, Flag, ListChecks, Moon, Repeat, Star, Tag, Trash2 } from 'lucide-react';
+import { Bell, CalendarDays, Copy, Flag, Heart, ListChecks, Moon, Repeat, Star, Tag, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ChecklistItem, Task, Visibility } from '../../shared/types.js';
 import { formatDeadline, formatShort } from '../../shared/dates.js';
 import { describeRule } from '../../shared/recurrence.js';
 import { AREAS } from '../lib/lists';
-import { deleteTask, updateTask } from '../lib/queries';
-import { checklist, deadline, isEvening, projectId, startDate } from '../../shared/taskFields.js';
+import { deleteTask, duplicateTask, updateTask } from '../lib/queries';
+import { checklist, deadline, isEvening, isFavorite, percentDone, priority, projectId, startDate } from '../../shared/taskFields.js';
+import { PriorityBadge, PrioritySelect } from './Priority';
 import { joinContent, newId, splitContent } from '../lib/task';
 import { showToast } from '../lib/toast';
 import { Checklist } from './Checklist';
@@ -56,6 +57,16 @@ export function TaskEditor({ task }: { task: Task }) {
   const start = startDate(task);
   const due = deadline(task);
   const pid = projectId(task);
+
+  const favorite = isFavorite(task);
+  const prio = priority(task);
+
+  const duplicate = () => {
+    save();
+    const copy = duplicateTask(task, t('task.copySuffix'));
+    ui.expand(copy.id);
+    showToast(t('task.duplicated'));
+  };
 
   const remove = () => {
     void deleteTask(task);
@@ -123,12 +134,22 @@ export function TaskEditor({ task }: { task: Task }) {
             />
           </label>
         )}
+        {prio > 0 && <PriorityBadge priority={prio} always />}
         {task.metadata.recurrence && (
           <button type="button" className="chip" onClick={() => setShowRecurrence(true)}>
             <Repeat size={13} /> {describeRule(task.metadata.recurrence, lang)}
           </button>
         )}
         <div className="ml-auto flex items-center gap-0.5 text-zinc-400">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-pressed={favorite}
+            title={favorite ? t('task.unfavorite') : t('task.favorite')}
+            onClick={() => void updateTask(task, { metadata: { favorite: favorite ? null : true } })}
+          >
+            <Heart size={17} className={favorite ? 'fill-rose-400 text-rose-400' : ''} />
+          </button>
           <button type="button" className="icon-btn" title={t('task.when')} onClick={() => ui.openPicker({ task, mode: 'when' })}>
             <CalendarDays size={17} />
           </button>
@@ -189,6 +210,24 @@ export function TaskEditor({ task }: { task: Task }) {
               ))}
             </select>
           </label>
+          <label className="field">
+            <span className="section-label">{t('priority.label')}</span>
+            <PrioritySelect value={prio} onChange={(p) => void updateTask(task, { metadata: { priority: p || null } })} />
+          </label>
+          <label className="field">
+            <span className="section-label">{t('task.progress')}</span>
+            <select
+              value={percentDone(task)}
+              onChange={(e) => void updateTask(task, { metadata: { percent_done: Number(e.target.value) || null } })}
+              className="input"
+            >
+              {Array.from({ length: 11 }, (_, i) => i * 10).map((p) => (
+                <option key={p} value={p}>
+                  {p}%
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="field sm:col-span-2">
             <span className="section-label">{t('task.context')}</span>
             <textarea
@@ -205,9 +244,14 @@ export function TaskEditor({ task }: { task: Task }) {
           <LinkedKnowledge taskId={task.id} />
         </div>
         {typeof task.metadata.source === 'string' && <p className="mt-3 text-xs text-zinc-400">{t('task.source', { source: task.metadata.source })}</p>}
-        <button type="button" onClick={remove} className="mt-3 inline-flex items-center gap-1.5 text-xs text-rose-600 hover:underline">
-          <Trash2 size={13} /> {t('task.deleteTask')}
-        </button>
+        <div className="mt-3 flex items-center gap-4">
+          <button type="button" onClick={duplicate} className="inline-flex items-center gap-1.5 text-xs text-sky-600 hover:underline">
+            <Copy size={13} /> {t('task.duplicateTask')}
+          </button>
+          <button type="button" onClick={remove} className="inline-flex items-center gap-1.5 text-xs text-rose-600 hover:underline">
+            <Trash2 size={13} /> {t('task.deleteTask')}
+          </button>
+        </div>
       </details>
 
       {showRecurrence && (

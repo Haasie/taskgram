@@ -44,6 +44,11 @@ export type TaskMetadata = {
   recurrence_parent_id?: string | null;
   recurrence_next_id?: string | null;
   reminder_time?: string | null;
+  /** Vikunja-stijl prioriteit: 1 laag … 5 nu doen. */
+  priority?: number | null;
+  /** Voortgang in procenten (0–100, stappen van 10). */
+  percent_done?: number | null;
+  favorite?: boolean | null;
   [key: string]: unknown;
 };
 
@@ -63,5 +68,9 @@ export type LinkedEntity = {
   direction: 'outgoing' | 'incoming';
   entity: { id: string; type: string; content: string; tags: string[] } | null;
 };
+
+/** Relaties tussen taken (Postgram-edges), naar Vikunja's taakrelaties. */
+export const TASK_RELATIONS = ['related_to', 'blocked_by', 'part_of', 'depends_on', 'duplicates'] as const;
+export type TaskRelation = (typeof TASK_RELATIONS)[number];
 
 export type SearchHit = { id: string; type: string; content: string; score: number };

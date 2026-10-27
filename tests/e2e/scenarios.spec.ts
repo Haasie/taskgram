@@ -386,3 +386,69 @@ test('E11: Update notice when a new service worker takes over', async ({ page })
   await expect(page.getByText('Er is een nieuwe versie van de app.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Vernieuwen' })).toBeVisible();
 });
+
+test('E12: Quick Add Magic, favorites and saved filters', async ({ page }) => {
+  await page.goto('/#/inbox');
+  await expect(page.getByText('Inbox taak 1')).toBeVisible();
+
+  // Quick Add Magic: label, project, prioriteit en datum uit de titel.
+  await page.getByRole('button', { name: 'Nieuwe taak' }).click();
+  await page.getByPlaceholder('Nieuwe taak').fill('Offerte sturen +alfa *mail !4 morgen');
+  await expect(page.getByTestId('quick-add-magic')).toContainText('Project Alfa');
+  await page.getByRole('button', { name: 'Toevoegen' }).click();
+
+  await expect
+    .poll(async () => (await state()).entities.find((e) => e.content === 'Offerte sturen'))
+    .toMatchObject({
+      status: 'scheduled',
+      tags: ['mail'],
+      metadata: expect.objectContaining({ priority: 4, project_id: FIXTURE_IDS.PROJECT_1 })
+    });
+
+  // Favoriet via sneltoets f.
+  const row = page.locator(`[data-task-id="${FIXTURE_IDS.INBOX_TASK_2}"]`);
+  await row.click();
+  await page.keyboard.press('f');
+  await page.goto('/#/favorites');
+  await expect(page.locator('main').getByText('Inbox taak 2')).toBeVisible();
+  await expect(page.locator('main').getByText('Inbox taak 1')).not.toBeVisible();
+  await expect
+    .poll(async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.INBOX_TASK_2)?.metadata?.favorite)
+    .toBe(true);
+
+  // Filter op prioriteit en opslaan.
+  await page.goto('/#/filter?prio=4');
+  await expect(page.locator('main').getByText('Offerte sturen')).toBeVisible();
+  await expect(page.locator('main').getByText('Inbox taak 1')).not.toBeVisible();
+  page.once('dialog', (d) => void d.accept('Belangrijk'));
+  await page.getByRole('button', { name: 'Opslaan als filter' }).click();
+  await expect(page.locator('nav').getByRole('button', { name: 'Belangrijk' })).toBeVisible();
+  await page.goto('/#/today');
+  await page.locator('nav').getByRole('button', { name: 'Belangrijk' }).click();
+  await expect(page.locator('main').getByText('Offerte sturen')).toBeVisible();
+});
+
+test('E13: Project board moves tasks between columns', async ({ page }) => {
+  await page.goto(`/#/project/${FIXTURE_IDS.PROJECT_1}`);
+  await page.getByRole('button', { name: 'Bord' }).click();
+
+  const card = page.locator(`[data-task-id="${FIXTURE_IDS.PROJECT_TASK_1}"]`);
+  await expect(page.getByTestId('board-column-todo').locator(`[data-task-id="${FIXTURE_IDS.PROJECT_TASK_1}"]`)).toBeVisible();
+
+  const from = await card.boundingBox();
+  const to = await page.getByTestId('board-column-waiting').boundingBox();
+  await page.mouse.move(from!.x + 40, from!.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(from!.x + 60, from!.y + 20, { steps: 5 });
+  await page.mouse.move(to!.x + to!.width / 2, to!.y + 40, { steps: 15 });
+  await page.mouse.up();
+
+  await expect(page.getByTestId('board-column-waiting').locator(`[data-task-id="${FIXTURE_IDS.PROJECT_TASK_1}"]`)).toBeVisible();
+  await expect
+    .poll(async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.PROJECT_TASK_1)?.status)
+    .toBe('waiting');
+
+  // Layout blijft per project bewaard.
+  await page.reload();
+  await expect(page.getByTestId('board-column-waiting')).toBeVisible();
+});
