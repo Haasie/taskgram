@@ -91,12 +91,25 @@ const searchBody = z.object({ query: z.string().trim().min(1).max(500) }).strict
 const projectCreate = z
   .object({ content: z.string().trim().min(1).max(20_000), visibility: visibility.optional() })
   .strict();
+/** Radarvelden op een projectkaart (zie shared/radar.ts). Overige metadata blijft onaangeroerd. */
+const radarMetadata = z
+  .object({
+    fase: z.string().trim().max(200).nullable(),
+    rag: z.enum(['rood', 'oranje', 'groen']).nullable(),
+    volgende_stap: z.string().trim().max(500).nullable(),
+    extern: z.string().trim().max(300).nullable(),
+    deadline: date.nullable(),
+    risico: z.string().trim().max(500).nullable()
+  })
+  .partial()
+  .strict();
 const projectUpdate = z
   .object({
     version: z.number().int().positive(),
     content: z.string().trim().min(1).max(20_000).optional(),
     status: z.enum(['active', 'done', 'archived']).optional(),
-    visibility: visibility.optional()
+    visibility: visibility.optional(),
+    metadata: radarMetadata.optional()
   })
   .strict();
 

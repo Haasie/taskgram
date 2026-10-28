@@ -3,7 +3,7 @@ import { get, set } from 'idb-keyval';
 import { toISODate } from '../../shared/dates.js';
 import { startDate } from '../../shared/taskFields.js';
 import type { Project, Task, TaskMetadata } from '../../shared/types.js';
-import { api, ApiError, type CreateTaskInput, type TaskPatch } from './api';
+import { api, ApiError, type CreateTaskInput, type ProjectPatch, type TaskPatch } from './api';
 import {
   applyOutbox,
   computeBase,
@@ -272,10 +272,12 @@ export async function createProject(content: string, visibility: Project['visibi
   }
 }
 
-export function updateProject(projectId: string, patch: { content?: string; status?: 'active' | 'done' | 'archived' }) {
+export function updateProject(projectId: string, patch: ProjectPatch) {
   queryClient.setQueryData<Project[]>(PROJECTS, (old) =>
     (old ?? [])
-      .map((p) => (p.id === projectId ? { ...p, ...patch } : p))
+      .map((p) =>
+        p.id === projectId ? { ...p, ...patch, metadata: patch.metadata ? { ...p.metadata, ...patch.metadata } : p.metadata } : p
+      )
       .filter((p) => p.status !== 'archived')
   );
   return enqueue('project:' + projectId, async () => {

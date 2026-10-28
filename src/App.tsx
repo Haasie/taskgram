@@ -37,6 +37,7 @@ import { Modal } from './components/Modal';
 import { QuickEntry, type QuickEntryDefaults } from './components/QuickEntry';
 import { QuickFind } from './components/QuickFind';
 import { Sidebar } from './components/Sidebar';
+import { RadarView } from './components/RadarView';
 import { SyncIndicator } from './components/SyncIndicator';
 import { ConflictDialog } from './components/ConflictDialog';
 import { SettingsDialog } from './components/SettingsDialog';
@@ -164,6 +165,7 @@ export function App() {
       case 'project':
         return { when: { kind: 'anytime' }, projectId: view.id };
       case 'area':
+      case 'radar':
         return { when: { kind: 'anytime' }, visibility: view.area };
       case 'favorites':
         return { when: { kind: 'anytime' } };
@@ -412,6 +414,7 @@ export function App() {
         </>
       );
     }
+    if (view.kind === 'radar') return null;
     if (view.kind === 'area') {
       return <ViewTitle icon={<Box size={26} className="text-zinc-400" />} title={AREAS.find((a) => a.id === view.area)?.label ?? ''} />;
     }
@@ -421,7 +424,7 @@ export function App() {
 
   const emptyTextForView = (v: View): string => {
     if (v.kind === 'project') return t('empty.project');
-    if (v.kind === 'area') return t('empty.area');
+    if (v.kind === 'area' || v.kind === 'radar') return t('empty.area');
     if (v.kind === 'favorites') return t('empty.favorites');
     if (v.kind === 'filter') return t('empty.filter');
     switch (v.kind) {
@@ -449,6 +452,9 @@ export function App() {
       );
     }
     if (!view) return null;
+    if (view.kind === 'radar') {
+      return <RadarView area={view.area} tasks={tasks} projects={allProjects} today={today} onOpenProject={(id) => navigate({ kind: 'project', id })} />;
+    }
     if (view.kind === 'logbook') return <Logbook header={header} />;
     if (view.kind === 'project' && layout === 'board') {
       return (

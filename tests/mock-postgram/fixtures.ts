@@ -23,7 +23,9 @@ export const FIXTURE_IDS = {
   WAITING_TASK: '55555555-5555-4555-8555-555555555555',
   PROJECT_1: '66666666-6666-4666-8666-666666666666',
   PROJECT_TASK_1: '77777777-7777-4777-8777-777777777777',
-  EDGE_PROJECT_1: '88888888-8888-4888-8888-888888888888'
+  EDGE_PROJECT_1: '88888888-8888-4888-8888-888888888888',
+  RADAR_PROJECT: '99999999-9999-4999-8999-999999999999',
+  RADAR_TASK: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 };
 
 export function createFixtures(): { entities: RawEntity[]; edges: RawEdge[] } {
@@ -122,6 +124,33 @@ export function createFixtures(): { entities: RawEntity[]; edges: RawEdge[] } {
       updated_at: now
     }
   ];
+
+  entities.push(
+    {
+      id: FIXTURE_IDS.RADAR_PROJECT,
+      type: 'project',
+      content: 'P01 Radarproject\n\nWerkradar-kaart voor de tests.',
+      status: 'active',
+      visibility: 'work',
+      version: 1,
+      tags: ['werkradar'],
+      metadata: { code: 'P01', naam: 'Radarproject', fase: 'Pilot', rag: 'oranje', volgende_stap: 'Opleveren', deadline: addDays(today, 3), sort: 1 },
+      created_at: now,
+      updated_at: now
+    },
+    {
+      id: FIXTURE_IDS.RADAR_TASK,
+      type: 'task',
+      content: 'Radartaak',
+      status: 'next',
+      visibility: 'work',
+      version: 1,
+      tags: [],
+      metadata: { project_id: FIXTURE_IDS.RADAR_PROJECT },
+      created_at: now,
+      updated_at: now
+    }
+  );
 
   const edges: RawEdge[] = [
     {

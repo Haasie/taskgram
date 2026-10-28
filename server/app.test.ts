@@ -360,3 +360,38 @@ describe('push routes', () => {
     }
   });
 });
+
+describe('radar metadata op projecten', () => {
+  const h = { ...authed, 'x-requested-with': 'taskgram', 'content-type': 'application/json' };
+
+  it('stuurt toegestane radarvelden door naar Postgram', async () => {
+    const updateEntity = vi.fn(async (id: string, body: any) => ({
+      id, type: 'project', content: 'P01 X', visibility: 'work', status: 'active', version: 2, tags: ['werkradar'],
+      metadata: { code: 'P01', ...body.metadata }, created_at: '', updated_at: ''
+    }));
+    const radarApp = createApp(config, { ...pg, updateEntity } as unknown as PostgramClient);
+    const res = await radarApp.request('/api/projects/11111111-1111-4111-8111-111111111111', {
+      method: 'PATCH',
+      headers: h,
+      body: JSON.stringify({ version: 1, metadata: { rag: 'rood', deadline: '2026-10-31', volgende_stap: 'Opleveren' } })
+    });
+    expect(res.status).toBe(200);
+    expect(updateEntity).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', {
+      version: 1,
+      metadata: { rag: 'rood', deadline: '2026-10-31', volgende_stap: 'Opleveren' }
+    });
+    const body = await res.json();
+    expect(body.project.metadata).toMatchObject({ code: 'P01', rag: 'rood' });
+  });
+
+  it('weigert onbekende metadata en ongeldige RAG', async () => {
+    for (const metadata of [{ keywords: ['x'] }, { rag: 'paars' }, { deadline: 'morgen' }]) {
+      const res = await app.request('/api/projects/11111111-1111-4111-8111-111111111111', {
+        method: 'PATCH',
+        headers: h,
+        body: JSON.stringify({ version: 1, metadata })
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+});

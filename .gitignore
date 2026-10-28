@@ -10,3 +10,4 @@ playwright-report/
 
 # Local orchestration state
 .paseo-autopilot/
+.mcp.json

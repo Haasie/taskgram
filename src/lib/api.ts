@@ -1,4 +1,7 @@
 import type { LinkedEntity, Project, SearchHit, Task, TaskMetadata, TaskStatus, Visibility } from '../../shared/types.js';
+import type { RadarPatch } from '../../shared/radar.js';
+
+export type ProjectPatch = { content?: string; status?: 'active' | 'done' | 'archived'; metadata?: RadarPatch };
 
 export type AuthInfo = { mode: 'password' | 'proxy' | 'oidc' | 'dev'; user: string | null; loginUrl: string | null };
 
@@ -74,7 +77,7 @@ export const api = {
   projects: () => request<{ items: Project[] }>('GET', '/projects').then((r) => r.items),
   createProject: (content: string, visibility: Visibility) =>
     request<{ project: Project }>('POST', '/projects', { content, visibility }).then((r) => r.project),
-  updateProject: (id: string, version: number, patch: { content?: string; status?: 'active' | 'done' | 'archived' }) =>
+  updateProject: (id: string, version: number, patch: ProjectPatch) =>
     request<{ project: Project }>('PATCH', `/projects/${id}`, { version, ...patch }).then((r) => r.project),
   pushConfig: () => request<{ enabled: boolean; publicKey: string | null; settings: { digestEnabled: boolean; digestTime: string } }>('GET', '/push/config'),
   subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string }; label?: string | null }) =>

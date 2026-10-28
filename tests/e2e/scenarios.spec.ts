@@ -452,3 +452,28 @@ test('E13: Project board moves tasks between columns', async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId('board-column-waiting')).toBeVisible();
 });
+
+test('E20: Werkradar toont projectkaarten en bewaart radarvelden', async ({ page }) => {
+  await page.goto('/#/today');
+  await page.locator('nav').getByRole('button', { name: 'Radar', exact: true }).click();
+  await expect(page.getByTestId('radar-view')).toBeVisible();
+  const card = page.getByTestId('radar-card').filter({ hasText: 'Radarproject' });
+  await expect(card).toContainText('Oranje');
+  await expect(card).toContainText('Opleveren');
+  await expect(card).toContainText('nog 3 dagen');
+  await expect(card).toContainText('1 volgende');
+
+  await card.getByRole('button', { name: 'Bewerken' }).click();
+  await card.getByRole('combobox').selectOption('rood');
+  await card.getByRole('textbox').nth(1).fill('Requirements opleveren');
+  await card.getByRole('button', { name: 'Opslaan' }).click();
+  await expect(card).toContainText('Rood');
+  await expect(card).toContainText('Requirements opleveren');
+  await expect
+    .poll(async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.RADAR_PROJECT)?.metadata)
+    .toMatchObject({ rag: 'rood', volgende_stap: 'Requirements opleveren', code: 'P01' });
+
+  await card.getByRole('button', { name: 'Radarproject', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`#/project/${FIXTURE_IDS.RADAR_PROJECT}`));
+  await expect(page.locator('main').getByText('Radartaak')).toBeVisible();
+});

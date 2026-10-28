@@ -19,6 +19,10 @@ Taskgram only reads and writes tasks through the Postgram API.
   (blocked by, subtask of, depends on, duplicate of, related), duplicating tasks and Quick Add Magic:
   type `Call supplier +renovation *phone !4 tomorrow` to set project, label, priority and date at once
   (dates are only picked up at the end of the title, e.g. `… tomorrow` or `… due friday`).
+- **Radar per area** — a project board for Work and Personal: every Postgram project tagged `werkradar`
+  or `priveradar` becomes a card with status (red/amber/green), phase, next step, external party,
+  deadline and risk, plus a bar of its open tasks per status. Edit those fields inline; they are stored
+  in the project's metadata, so other tools reading Postgram see the same picture.
 - **Recurring tasks** — daily, weekly on chosen days, monthly, or N days/weeks after completion.
   Completing one creates exactly one next occurrence; undo removes it again.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
@@ -58,6 +62,7 @@ allows task operations (plus read-only knowledge search for linking).
 | Reminder | `metadata.reminder_time` (HH:MM, on the start date or deadline) |
 | Project | a Postgram `project` entity; the task gets `metadata.project_id` and a `part_of` edge |
 | Area | `visibility` (`work`, `personal`, `shared`) |
+| Radar card | a `project` tagged `werkradar` / `priveradar`; fields in `metadata` (`code`, `naam`, `fase`, `rag`, `volgende_stap`, `extern`, `deadline`, `risico`, `sort`) |
 | Notes | everything after the first line of `content` |
 | Priority | `metadata.priority` (1 low … 5 do now) |
 | Progress | `metadata.percent_done` (0–100) |

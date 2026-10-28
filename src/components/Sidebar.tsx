@@ -1,5 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import { Plus, Search, Box, Settings } from 'lucide-react';
+import { Plus, Search, Box, Settings, Radar } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { Project, Task, Visibility } from '../../shared/types.js';
@@ -12,6 +12,7 @@ import { projectTitle } from './UiContext';
 import { useSyncStatus } from '../lib/sync';
 import { SyncIndicator } from './SyncIndicator';
 import { t, useLang } from '../i18n/index.js';
+import { isRadarProject, radarMeta, radarTitle } from '../../shared/radar.js';
 
 type Props = {
   route: Route;
@@ -49,6 +50,12 @@ const MAIN: ListKind[] = ['inbox', 'today', 'upcoming', 'anytime', 'someday'];
 const EXTRA: ListKind[] = ['waiting', 'logbook'];
 const FavoritesIcon = EXTRA_META.favorites.Icon;
 const FilterIcon = EXTRA_META.filter.Icon;
+
+/** Radarprojecten eerst, op hun code (P01, P02 …); daarna de overige projecten in hun eigen volgorde. */
+function sortForSidebar(projects: Project[]): Project[] {
+  const radar = projects.filter((p) => isRadarProject(p)).sort((a, b) => (radarMeta(a).code ?? '').localeCompare(radarMeta(b).code ?? ''));
+  return [...radar, ...projects.filter((p) => !isRadarProject(p))];
+}
 
 export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProject, onSearch, onOpenConflicts, onOpenSettings, user }: Props) {
   useLang();
@@ -152,7 +159,16 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
                 <Plus size={15} />
               </button>
             </div>
-            {areaProjects.map((p) => {
+            {areaProjects.some((p) => isRadarProject(p, area.id)) && (
+              <Item
+                id={`radar:${area.id}`}
+                active={route.kind === 'radar' && route.area === area.id}
+                onClick={() => onNavigate({ kind: 'radar', area: area.id })}
+                icon={<Radar size={16} className={area.id === 'work' ? 'text-sky-600' : 'text-emerald-600'} />}
+                label={t('radar.sidebar')}
+              />
+            )}
+            {sortForSidebar(areaProjects).map((p) => {
               const open = tasks.filter((t) => projectId(t) === p.id && isOpen(t)).length;
               return (
                 <Item
@@ -161,7 +177,7 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
                   active={route.kind === 'project' && route.id === p.id}
                   onClick={() => onNavigate({ kind: 'project', id: p.id })}
                   icon={<ProgressRing done={0} total={open} />}
-                  label={projectTitle(p)}
+                  label={radarTitle(p, projectTitle)}
                   count={open || undefined}
                 />
               );
