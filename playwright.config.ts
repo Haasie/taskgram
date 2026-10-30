@@ -57,6 +57,8 @@ export default defineConfig({
         KOSYNC_USER: 'e2e',
         KOSYNC_PASSWORD: 'e2e-wachtwoord',
         KOSYNC_SYNC_MINUTES: '0',
+        SUPERVISOR_URL: 'http://localhost:4010/supervisor',
+        SUPERVISOR_TOKEN: 'e2e-supervisor',
         NODE_ENV: 'test'
       }
     }

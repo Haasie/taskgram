@@ -1,4 +1,4 @@
-/* Leesdossier — Dossier (licht) & Terminal (donker). Alles hangt onder .ld, zodat de rest van Taskgram niet verandert. */
+/* Dossier (licht) & Terminal (donker) — gedeelde stijl voor dashboard-modules. Alles hangt onder .ld, zodat de rest van Taskgram niet verandert. */
 .ld {
   --paper: #ebe7d8; --paper-raised: #f7f5ee; --paper-sunken: #ddd8c5; --rule: #b9b199; --rule-strong: #6d6650;
   --ink: #15202c; --ink-muted: #4b5461; --ink-faint: #5f6466; --gov: #1e3d70; --on-gov: #f7f5ee;

@@ -130,6 +130,13 @@ flows one way into the Leesdossier: books are matched on title (then remembered 
 updated, a queued book starts when progress appears, and at 99% it is marked finished. Finished or stopped books are
 never reset. Unknown documents are listed so you can add them.
 
+**Beheer.** Set `SUPERVISOR_URL` and `SUPERVISOR_TOKEN` to a Homelab Supervisor (haasiehomeops) and the module
+shows its `/api/status`: containers, storage/ZFS/SMART, backup age, the last restore drill, what Claude did and the
+audit log. Each state is shown with a word and a shape (● OK, ▲ LET OP, ■ ALARM), never colour alone; a supervisor
+that has not polled for 15 minutes counts as an alarm. The token stays on the server.
+
+Shared look for dashboard modules: `modules/_design` (Dossier light / Terminal dark), imported with `import '../_design'`.
+
 New modules are off by default (`defaultEnabled`). `scripts/seed-leesdossier.ts <file.json>` is an idempotent
 importer for Leesdossier books (it never overwrites existing books and links each book to a mirrored vault
 note with a `related_to` edge).

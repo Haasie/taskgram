@@ -1,9 +1,4 @@
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/600.css';
-import '@fontsource/ibm-plex-sans/400.css';
-import '@fontsource/ibm-plex-sans/600.css';
-import '@fontsource/vt323/400.css';
-import './leesdossier.css';
+import '../_design';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { ModuleViewProps } from '../types';
 import { BOOK_STATUSES, CATEGORIES, categoryName, type Book, type BookPatch, type BookStatus, type Category } from './book';
