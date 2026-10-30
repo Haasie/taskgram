@@ -1,0 +1,15 @@
+/* Beheer: statuskleuren altijd samen met een woord en een vorm (● OK, ▲ LET OP, ■ ALARM, ○ ONBEKEND). */
+.ld .bh-ok { --lvl: var(--c-fic); }
+.ld .bh-warn { --lvl: var(--accent); }
+.ld .bh-alert { --lvl: var(--sev-critical); }
+.ld .bh-unknown { --lvl: var(--ink-faint); }
+
+.ld .bh-tile { --t: var(--lvl); }
+.ld .bh-badge {
+  font: 600 10px/12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  padding: 2px 6px; border: 1.5px solid var(--lvl); color: var(--lvl); align-self: flex-start;
+}
+.ld .bh-alert.bh-badge { background: var(--lvl); color: var(--paper-raised); }
+.ld .bh-mark { font: 400 18px/18px var(--mono); color: var(--lvl); min-width: 28px; text-align: center; }
+.ld .ld-audit { grid-template-columns: auto 1fr; }
+.ld code { font-family: var(--mono); font-size: 13px; }

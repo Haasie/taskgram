@@ -55,7 +55,7 @@ function setup(moduleEnv: Record<string, string> = {}) {
 describe('modules', () => {
   it('staan standaard uit en de API weigert dan zonder Postgram te raken', async () => {
     const { pg, call } = setup();
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: true, priveradar: true } });
+    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: true, priveradar: true, beheer: false } });
     const res = await call('GET', '/leesdossier/books');
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe('MODULE_DISABLED');
@@ -66,13 +66,13 @@ describe('modules', () => {
     const { call } = setup();
     expect((await call('GET', '/werkradar/anything')).status).toBe(404);
     await call('PUT', '/werkradar', { enabled: false });
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: false, priveradar: true } });
+    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: false, priveradar: true, beheer: false } });
   });
 
   it('bewaart de schakelaar en weigert onbekende modules', async () => {
     const { call } = setup();
-    expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true } });
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true } });
+    expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true, beheer: false } });
+    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true, beheer: false } });
     expect((await call('PUT', '/bestaat-niet', { enabled: true })).status).toBe(404);
     expect((await call('PUT', '/leesdossier', { enabled: 'ja' })).status).toBe(400);
   });
@@ -169,5 +169,46 @@ describe('leesdossier: KOReader-sync', () => {
     expect(last).toMatchObject({ ok: false, error: 'KOReader sync server rejected the credentials' });
     await call('PUT', '/leesdossier', { enabled: false });
     expect((await call('POST', '/leesdossier/kosync/sync')).status).toBe(404);
+  });
+});
+
+describe('beheer: Supervisor-status', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('zonder SUPERVISOR_URL: niet gekoppeld, geen call', async () => {
+    const { call } = setup();
+    await call('PUT', '/beheer', { enabled: true });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await (await call('GET', '/beheer/status')).json()).toEqual({ configured: false, status: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('haalt de status met het token op de server en geeft alleen de omgezette velden door', async () => {
+    const { call } = setup({ SUPERVISOR_URL: 'http://supervisor.test:8090/', SUPERVISOR_TOKEN: 'geheim' });
+    await call('PUT', '/beheer', { enabled: true });
+    const fetchMock = vi.fn(async (url: string, init: { headers: Record<string, string> }) => {
+      expect(url).toBe('http://supervisor.test:8090/api/status');
+      expect(init.headers.authorization).toBe('Bearer geheim');
+      return new Response(JSON.stringify({ snapshot: { containers_total: 5, containers_not_running: [], external_ip: '1.2.3.4' } }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await call('GET', '/beheer/status');
+    const body = await res.json();
+    expect(body.configured).toBe(true);
+    expect(body.status.containers).toEqual({ total: 5, notRunning: [] });
+    expect(JSON.stringify(body)).not.toContain('1.2.3.4');
+    expect(JSON.stringify(body)).not.toContain('geheim');
+  });
+
+  it('meldt een afgewezen token als upstream-fout en weigert als de module uit staat', async () => {
+    const { call } = setup({ SUPERVISOR_URL: 'http://supervisor.test:8090', SUPERVISOR_TOKEN: 'fout' });
+    await call('PUT', '/beheer', { enabled: true });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Unauthorized', { status: 401 })));
+    const res = await call('GET', '/beheer/status');
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe('SUPERVISOR_AUTH');
+    await call('PUT', '/beheer', { enabled: false });
+    expect((await call('GET', '/beheer/status')).status).toBe(404);
   });
 });

@@ -667,3 +667,61 @@ test('E24: Werkradar en Privéradar zijn modules met een eigen schakelaar', asyn
   await page.reload();
   await expect(page.getByTestId('radar-view')).toBeVisible();
 });
+
+test('E25: Beheer toont de Supervisor-status met woorden én vormen, ook als er alarm is @mobile', async ({ page }, info) => {
+  const set = async (enabled: boolean) =>
+    expect((await page.request.put('/api/modules/beheer', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } })).ok()).toBe(true);
+  const status = (over: Record<string, unknown> = {}) => ({
+    snapshot: {
+      checked_at: new Date().toISOString(),
+      containers_total: 52,
+      containers_not_running: ['bpf-migrate-1'],
+      storage_mounts: [{ label: 'root', percent: 34 }],
+      zfs_pools: { tank: 'ONLINE' },
+      smart: { all_passed: true, disks: [{ id: 'nvme0n1', name: 'NVMe Boot SSD', passed: true, temperature_c: 34 }] },
+      ha_healthy: true,
+      security_events_24h: 12,
+      security_noise_24h: 300,
+      external_dns_status: 'ok',
+      host_dns_status: 'ok',
+      failed_checks: []
+    },
+    pending_actions: 0,
+    claude_calls_24h: 1,
+    recent_claude_calls: [{ ts: Date.now() / 1000, alert_key: 'container_down:owntube', host: 'haasieos', action_type: 'restart_container', risk: 'low', duration_s: 2.5 }],
+    backup: { last_success_age_days: 0.4 },
+    restore_drill: { at: new Date().toISOString(), ok: true, target: 'postgram', snapshot: '5ef48dd0', detail: '7823 entities' },
+    audit_recent: [{ ts: Date.now() / 1000, event: 'action_executed', action: 'restart_container', target: 'owntube' }],
+    ...over
+  });
+  const push = (body: unknown) =>
+    fetch('http://localhost:4010/__supervisor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  await set(false);
+  await page.goto('/#/beheer');
+  await expect(page).not.toHaveURL(/#\/beheer/);
+
+  await push(status());
+  await set(true);
+  await page.goto('/#/beheer');
+  await page.reload();
+  const tiles = page.getByRole('list', { name: 'Stand' });
+  await expect(tiles).toContainText('51/52');
+  await expect(tiles.getByRole('listitem').filter({ hasText: 'Restore-test' })).toContainText('● OK');
+  await expect(tiles.getByRole('listitem').filter({ hasText: 'Containers' })).toContainText('▲ LET OP');
+  await expect(page.getByRole('region', { name: 'Aandacht' })).toContainText('bpf-migrate-1');
+  await expect(page.getByRole('region', { name: 'Wat Claude deed' })).toContainText('restart_container · container_down:owntube');
+  await expect(page.getByRole('region', { name: 'Audit-log' })).toContainText('action=restart_container · target=owntube');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `test-results/beheer-${info.project.name}-${scheme}.png`, fullPage: true });
+  }
+
+  // Back-up gemist en ZFS degraded: alarm, met woord en vorm.
+  await push(status({ backup: { last_success_age_days: 3 }, snapshot: { ...status().snapshot, zfs_pools: { tank: 'DEGRADED' } } }));
+  await page.getByRole('button', { name: '⟳ Ververs' }).click();
+  await expect(tiles.getByRole('listitem').filter({ hasText: 'Back-up' })).toContainText('■ ALARM');
+  await expect(tiles.getByRole('listitem').filter({ hasText: 'ZFS' })).toContainText('■ ALARM');
+  await set(false);
+});

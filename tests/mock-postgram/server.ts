@@ -20,6 +20,7 @@ function resetState() {
   }
   edges = f.edges.map((e) => ({ ...e }));
   kosyncDocs = [];
+  supervisorStatus = null;
 }
 
 // Test hooks
@@ -45,6 +46,17 @@ app.post('/__bump/:id', (c) => {
   entity.version += 1;
   entity.updated_at = new Date().toISOString();
   return c.json({ entity });
+});
+
+// Nagebootste Homelab Supervisor (/api/status) voor de module Beheer.
+let supervisorStatus: unknown = null;
+app.post('/__supervisor', async (c) => {
+  supervisorStatus = await c.req.json();
+  return c.json({ ok: true });
+});
+app.get('/supervisor/api/status', (c) => {
+  if (c.req.header('authorization') !== 'Bearer e2e-supervisor') return c.text('Unauthorized', 401);
+  return supervisorStatus ? c.json(supervisorStatus) : c.json({ snapshot: {} });
 });
 
 app.post('/__kosync', async (c) => {
