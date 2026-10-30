@@ -53,6 +53,9 @@ export default defineConfig({
         VAPID_PUBLIC_KEY: vapidKeys.publicKey,
         VAPID_PRIVATE_KEY: vapidKeys.privateKey,
         VAPID_SUBJECT: 'mailto:test@example.com',
+        KOSYNC_URL: 'http://localhost:4010/kosync',
+        KOSYNC_USER: 'e2e',
+        KOSYNC_PASSWORD: 'e2e-wachtwoord',
         NODE_ENV: 'test'
       }
     }

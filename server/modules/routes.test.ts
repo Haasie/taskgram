@@ -1,7 +1,8 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import type { Config } from '../config.js';
 import type { PostgramClient, RawEntity } from '../postgram.js';
@@ -34,7 +35,7 @@ const entity = (over: Partial<RawEntity>): RawEntity => ({
   ...over
 });
 
-function setup() {
+function setup(moduleEnv: Record<string, string> = {}) {
   const pg = {
     listEntities: vi.fn(async () => [entity({})]),
     getEntity: vi.fn(async (id: string) => (id === BOOK_ID ? entity({}) : entity({ id, tags: [] }))),
@@ -45,7 +46,7 @@ function setup() {
     deleteEntity: vi.fn(async () => ({}))
   };
   const moduleStore = createModuleStore(mkdtempSync(join(tmpdir(), 'tg-modules-')));
-  const app = createApp(config, pg as unknown as PostgramClient, { moduleStore });
+  const app = createApp(config, pg as unknown as PostgramClient, { moduleStore, moduleEnv });
   const call = (method: string, path: string, body?: unknown) =>
     app.request(`/api/modules${path}`, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   return { pg, call };
@@ -100,5 +101,66 @@ describe('modules', () => {
     expect((await call('POST', '/leesdossier/books', { author: 'zonder titel' })).status).toBe(400);
     expect(pg.deleteEntity).not.toHaveBeenCalled();
     expect(pg.updateEntity).not.toHaveBeenCalled();
+  });
+});
+
+describe('leesdossier: KOReader-sync', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const env = { KOSYNC_URL: 'https://kosync.example/', KOSYNC_USER: 'lezer', KOSYNC_PASSWORD: 'geheim' };
+  const doc = { document: 'd6abb38b', percentage: 0.54, timestamp: 1793231549, device: 'PBTouchHDPlus', title: 'Zuid: De Endurance-expeditie', authors: 'Ernest Shackleton', filename: null };
+  const unknown = { document: 'ffff0000', percentage: 0.1, timestamp: 1793231549, device: 'PB', title: 'Onbekend boek', authors: 'A; B', filename: null };
+
+  function stubKosync(documents: unknown[], status = 200) {
+    const fetchMock = vi.fn(async (url: string, init: { headers: Record<string, string> }) => {
+      expect(url).toBe('https://kosync.example/syncs/documents');
+      expect(init.headers['x-auth-user']).toBe('lezer');
+      expect(init.headers['x-auth-key']).toBe(createHash('md5').update('geheim').digest('hex'));
+      return new Response(JSON.stringify({ documents }), { status, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('meldt niet-geconfigureerd zonder KOSYNC_* en raakt kosync dan niet', async () => {
+    const { call } = setup();
+    await call('PUT', '/leesdossier', { enabled: true });
+    const fetchMock = stubKosync([]);
+    expect(await (await call('GET', '/leesdossier/kosync')).json()).toEqual({ configured: false, last: null });
+    expect((await call('POST', '/leesdossier/kosync/sync')).status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('synct voortgang naar het gekoppelde boek en houdt onbekende documenten apart', async () => {
+    const { pg, call } = setup(env);
+    await call('PUT', '/leesdossier', { enabled: true });
+    stubKosync([doc, unknown]);
+    const { last } = await (await call('POST', '/leesdossier/kosync/sync')).json();
+    expect(last).toMatchObject({ ok: true, documents: 2, updated: ['Zuid'] });
+    expect(last.unmatched.map((d: { document: string }) => d.document)).toEqual(['ffff0000']);
+    expect(pg.updateEntity).toHaveBeenCalledWith(BOOK_ID, expect.objectContaining({
+      version: 3,
+      metadata: expect.objectContaining({ status: 'lezend', progress: 54, kosync_document: 'd6abb38b', kosync_at: 1793231549 })
+    }));
+    expect((await (await call('GET', '/leesdossier/kosync')).json()).last.updated).toEqual(['Zuid']);
+  });
+
+  it('voegt een onbekend document toe als gekoppeld boek', async () => {
+    const { pg, call } = setup(env);
+    await call('PUT', '/leesdossier', { enabled: true });
+    stubKosync([unknown]);
+    const res = await call('POST', '/leesdossier/kosync/adopt/ffff0000', { cat: 'fic' });
+    expect(res.status).toBe(201);
+    expect(pg.createEntity).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ title: 'Onbekend boek', author: 'A, B', cat: 'fic' }) }));
+    expect(pg.updateEntity).toHaveBeenCalledWith(BOOK_ID, expect.objectContaining({ metadata: expect.objectContaining({ kosync_document: 'ffff0000', progress: 10 }) }));
+  });
+
+  it('rapporteert een afgewezen login zonder te crashen, en weigert als de module uit staat', async () => {
+    const { call } = setup(env);
+    await call('PUT', '/leesdossier', { enabled: true });
+    stubKosync([], 401);
+    const { last } = await (await call('POST', '/leesdossier/kosync/sync')).json();
+    expect(last).toMatchObject({ ok: false, error: 'KOReader sync server rejected the credentials' });
+    await call('PUT', '/leesdossier', { enabled: false });
+    expect((await call('POST', '/leesdossier/kosync/sync')).status).toBe(404);
   });
 });

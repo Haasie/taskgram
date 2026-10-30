@@ -146,3 +146,10 @@
 .ld-check { display: flex; gap: 8px; align-items: center; font: 400 13px/18px var(--mono); }
 .ld-check input { accent-color: var(--gov); width: 16px; height: 16px; }
 .ld-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.ld-kosync { margin: 0; font-family: var(--mono); font-size: 12px; }
+.ld-kosync::before { content: '⟳ '; color: var(--gov); }
+.ld-kosync-error { color: var(--sev-critical); }
+.ld-kosync-error::before { content: ''; }
+.ld-title-static { font: 600 15px/22px var(--sans); overflow-wrap: anywhere; }
+.ld-select { padding: 4px 8px; min-height: 32px; border: 1.5px solid var(--rule-strong); border-radius: 2px; background: var(--paper); max-width: 100%; }

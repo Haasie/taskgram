@@ -8,12 +8,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import type { ModuleViewProps } from '../types';
 import { BOOK_STATUSES, CATEGORIES, categoryName, type Book, type BookPatch, type BookStatus, type Category } from './book';
 import { QUARTER_GOAL, counts, exportMarkdown, matches, maxOrder, sections, statusPatch, swapInQueue } from './logic';
-import { createBook, deleteBook, updateBook, useBooks } from './data';
+import { adoptKosync, createBook, deleteBook, syncKosync, updateBook, useBooks, useKosync, type KosyncStatus } from './data';
+import type { KosyncDocument } from './kosync';
 
 type Panel = { kind: 'edit'; book: Book | null } | { kind: 'export' } | null;
 
 export default function LeesdossierView({ today }: ModuleViewProps) {
   const query = useBooks();
+  const kosync = useKosync();
+  const [syncing, setSyncing] = useState(false);
   const books = useMemo(() => query.data ?? [], [query.data]);
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState<Category | ''>('');
@@ -47,6 +50,19 @@ export default function LeesdossierView({ today }: ModuleViewProps) {
               <p className="ld-sub">Eén lijst voor alles wat je leest of wilt lezen. Status: te-lezen, lezend, uit, gestaakt.</p>
             </div>
             <div className="ld-bar">
+              {kosync.data?.configured && (
+                <button
+                  className="ld-btn ld-sec ld-sm"
+                  type="button"
+                  disabled={syncing}
+                  onClick={() => {
+                    setSyncing(true);
+                    void syncKosync().finally(() => setSyncing(false));
+                  }}
+                >
+                  {syncing ? 'Syncen…' : '⟳ Sync KOReader'}
+                </button>
+              )}
               <button className="ld-btn ld-sec ld-sm" type="button" onClick={() => setPanel({ kind: 'export' })} disabled={!books.length}>
                 Export MD
               </button>
@@ -67,6 +83,7 @@ export default function LeesdossierView({ today }: ModuleViewProps) {
               </div>
             </Tile>
           </div>
+          {kosync.data?.configured && <KosyncLine status={kosync.data} />}
 
           <input
             type="search"
@@ -167,6 +184,16 @@ export default function LeesdossierView({ today }: ModuleViewProps) {
                 ))}
               </ul>
             </Section>
+
+            {(kosync.data?.last?.unmatched.length ?? 0) > 0 && !filtering && (
+              <Section title="Onbekend in KOReader" count={kosync.data!.last!.unmatched.length} empty="">
+                <ul className="ld-list">
+                  {kosync.data!.last!.unmatched.map((d) => (
+                    <UnknownDoc key={d.document} doc={d} />
+                  ))}
+                </ul>
+              </Section>
+            )}
 
             {s.stopped.length > 0 && (
               <Section title="Gestaakt" count={s.stopped.length} empty="">
@@ -283,7 +310,10 @@ function ReadingCard({ book, today, onStatus, onEdit }: { book: Book; today: str
     <article className="ld-dossier" aria-label={book.title}>
       <div className="ld-dtab">
         <span className="ld-label">{categoryName(book.cat)}</span>
-        <span className="ld-label">{book.started ? `sinds ${book.started}` : 'lezend'}</span>
+        <span className="ld-label">
+          {book.started ? `sinds ${book.started}` : 'lezend'}
+          {book.kosyncAt ? ` · KOReader ${syncTime(book.kosyncAt)}` : ''}
+        </span>
       </div>
       <div className="ld-dbody">
         <h3>
@@ -499,6 +529,7 @@ function EditPanel({ book, today, onDone }: { book: Book | null; today: string; 
         <input type="checkbox" checked={f.verify} onChange={(e) => set('verify', e.target.checked)} /> Titel of auteur nog te checken
       </label>
       {book?.vaultPath && <p className="ld-meta">Vault-note: {book.vaultPath}</p>}
+      {book?.kosyncAt && <p className="ld-meta">Gekoppeld aan KOReader; laatste sync {syncTime(book.kosyncAt)}. Voortgang en status worden automatisch bijgewerkt.</p>}
       <div className="ld-row">
         <button className="ld-btn" type="submit" disabled={busy}>
           Opslaan
@@ -532,5 +563,53 @@ function Field({ label, id, children }: { label: string; id: string; children: R
       </label>
       {children}
     </div>
+  );
+}
+
+const syncTime = (unixSeconds: number) =>
+  new Date(unixSeconds * 1000).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+function KosyncLine({ status }: { status: KosyncStatus }) {
+  const last = status.last;
+  if (!last) return <p className="ld-meta ld-kosync">KOReader-sync: nog niet gesynct.</p>;
+  const at = syncTime(Date.parse(last.at) / 1000);
+  return last.ok ? (
+    <p className="ld-meta ld-kosync" role="status">
+      KOReader-sync {at} · {last.documents} {last.documents === 1 ? 'document' : 'documenten'}
+      {last.updated.length ? ` · bijgewerkt: ${last.updated.join(', ')}` : ' · niets nieuws'}
+    </p>
+  ) : (
+    <p className="ld-meta ld-kosync ld-kosync-error" role="alert">
+      ✕ KOReader-sync mislukt ({at}): {last.error}
+    </p>
+  );
+}
+
+function UnknownDoc({ doc }: { doc: KosyncDocument }) {
+  const [cat, setCat] = useState<Category>('ov');
+  const [busy, setBusy] = useState(false);
+  const title = doc.title || doc.filename || doc.document;
+  return (
+    <li className="ld-item">
+      <span className="ld-pos" aria-hidden="true">?</span>
+      <div className="ld-t">
+        <span className="ld-title-static">{title}</span>
+        <div className="ld-meta">
+          {[doc.authors?.replace(/\s*;\s*/g, ', '), `${Math.round(doc.percentage * 100)}%`, doc.device, syncTime(doc.timestamp)].filter(Boolean).join(' · ')}
+        </div>
+      </div>
+      <div className="ld-acts">
+        <select className="ld-select" aria-label={`Categorie voor ${title}`} value={cat} onChange={(e) => setCat(e.target.value as Category)}>
+          {CATEGORIES.map(([id, name]) => (
+            <option key={id} value={id}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <button className="ld-btn ld-sm" type="button" disabled={busy} onClick={() => (setBusy(true), void adoptKosync(doc, cat).finally(() => setBusy(false)))}>
+          + Toevoegen
+        </button>
+      </div>
+    </li>
   );
 }

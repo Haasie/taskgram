@@ -599,3 +599,44 @@ test('E22: Leesdossier in licht en donker, ook op telefoonbreedte @mobile', asyn
   }
   await setModule(page, false);
 });
+
+test('E23: Leesdossier synct voortgang uit KOReader en voegt onbekende boeken toe', async ({ page }) => {
+  await setModule(page, true);
+  await seedBook({ title: 'Zuid', author: 'Ernest Shackleton', status: 'te-lezen', cat: 'reis', order: 1 });
+  const ts = Math.floor(Date.UTC(2026, 9, 28, 22, 52) / 1000);
+  await fetch('http://localhost:4010/__kosync', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify([
+      { document: 'aaa111', percentage: 0.54, timestamp: ts, device: 'PBTouchHDPlus', title: 'Zuid: De Endurance-expeditie', authors: 'Ernest Shackleton', filename: 'Zuid.epub' },
+      { document: 'bbb222', percentage: 0.2, timestamp: ts, device: 'PBTouchHDPlus', title: 'Onbekend Boek', authors: 'Iemand; Ander', filename: null }
+    ])
+  });
+
+  await page.goto('/#/lezen');
+  await expect(page.getByText('KOReader-sync: nog niet gesynct.')).toBeVisible();
+  await page.getByRole('button', { name: '⟳ Sync KOReader' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'KOReader-sync' })).toContainText('bijgewerkt: Zuid');
+
+  // Uit de wachtrij naar Nu lezend, met de voortgang uit KOReader.
+  const reading = page.getByRole('region', { name: 'Nu lezend' });
+  await expect(reading).toContainText('Zuid');
+  await expect(reading).toContainText('54%');
+  await expect(reading).toContainText('sinds 2026-10-28');
+  await expect.poll(async () => (await state()).entities.find((e) => e.metadata?.title === 'Zuid')?.metadata).toMatchObject({ status: 'lezend', progress: 54, kosync_document: 'aaa111' });
+
+  // Onbekend document toevoegen.
+  const unknown = page.getByRole('region', { name: 'Onbekend in KOReader' });
+  await expect(unknown).toContainText('Onbekend Boek');
+  await unknown.getByLabel('Categorie voor Onbekend Boek').selectOption('fic');
+  await unknown.getByRole('button', { name: '+ Toevoegen' }).click();
+  await expect(page.getByRole('region', { name: 'Onbekend in KOReader' })).toHaveCount(0);
+  await expect(reading).toContainText('Onbekend Boek');
+  await expect(reading).toContainText('Iemand, Ander');
+
+  // Tweede sync: niets nieuws, geen dubbelen.
+  await page.getByRole('button', { name: '⟳ Sync KOReader' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'KOReader-sync' })).toContainText('niets nieuws');
+  expect((await state()).entities.filter((e) => e.tags.includes('book') && e.status !== 'archived')).toHaveLength(2);
+  await setModule(page, false);
+});
