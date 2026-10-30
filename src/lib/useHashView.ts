@@ -18,8 +18,7 @@ export function parseHash(hash: string): Route {
   if (a && (LISTS as string[]).includes(a)) return { kind: a as ListKind };
   if (a === 'project' && b) return { kind: 'project', id: b };
   if (a === 'area' && (b === 'work' || b === 'personal' || b === 'shared')) return { kind: 'area', area: b as Visibility };
-  if (a === 'radar' && (b === 'work' || b === 'personal')) return { kind: 'radar', area: b as Visibility };
-  const mod = a ? moduleByRoute(a) : undefined;
+  const mod = moduleByRoute(path.replace(/^\/+|\/+$/g, ''));
   if (mod) return { kind: 'module', id: mod.id };
   return { kind: 'home' };
 }
@@ -27,7 +26,6 @@ export function parseHash(hash: string): Route {
 export function routeToHash(route: Route): string {
   if (route.kind === 'project') return `#/project/${route.id}`;
   if (route.kind === 'area') return `#/area/${route.area}`;
-  if (route.kind === 'radar') return `#/radar/${route.area}`;
   if (route.kind === 'home') return '#/';
   if (route.kind === 'module') return `#/${moduleById(route.id)?.route ?? ''}`;
   if (route.kind === 'filter') return `#/filter${route.savedId ? `/${route.savedId}` : ''}${route.query ? `?${route.query}` : ''}`;

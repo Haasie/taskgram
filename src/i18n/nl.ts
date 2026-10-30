@@ -30,7 +30,6 @@ export const nl = {
   'area.shared': 'Gedeeld',
 
   // Radar
-  'radar.sidebar': 'Radar',
   'radar.title.work': 'Werkradar',
   'radar.title.personal': 'Privéradar',
   'radar.lede': 'Projectkaarten uit Postgram (tag {tag}). Deadline eerst, dan rood · oranje · groen.',

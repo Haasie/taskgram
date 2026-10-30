@@ -56,6 +56,7 @@ export default defineConfig({
         KOSYNC_URL: 'http://localhost:4010/kosync',
         KOSYNC_USER: 'e2e',
         KOSYNC_PASSWORD: 'e2e-wachtwoord',
+        KOSYNC_SYNC_MINUTES: '0',
         NODE_ENV: 'test'
       }
     }

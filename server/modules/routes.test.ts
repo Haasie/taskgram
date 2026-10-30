@@ -55,17 +55,24 @@ function setup(moduleEnv: Record<string, string> = {}) {
 describe('modules', () => {
   it('staan standaard uit en de API weigert dan zonder Postgram te raken', async () => {
     const { pg, call } = setup();
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false } });
+    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: true, priveradar: true } });
     const res = await call('GET', '/leesdossier/books');
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe('MODULE_DISABLED');
     expect(pg.listEntities).not.toHaveBeenCalled();
   });
 
+  it('modules zonder server.ts (radars) hebben geen module-API', async () => {
+    const { call } = setup();
+    expect((await call('GET', '/werkradar/anything')).status).toBe(404);
+    await call('PUT', '/werkradar', { enabled: false });
+    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: false, priveradar: true } });
+  });
+
   it('bewaart de schakelaar en weigert onbekende modules', async () => {
     const { call } = setup();
-    expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toEqual({ modules: { leesdossier: true } });
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: true } });
+    expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true } });
+    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true } });
     expect((await call('PUT', '/bestaat-niet', { enabled: true })).status).toBe(404);
     expect((await call('PUT', '/leesdossier', { enabled: 'ja' })).status).toBe(400);
   });

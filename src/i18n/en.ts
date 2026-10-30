@@ -32,7 +32,6 @@ export const en: Record<keyof typeof nl, string> = {
   'area.shared': 'Shared',
 
   // Radar
-  'radar.sidebar': 'Radar',
   'radar.title.work': 'Work radar',
   'radar.title.personal': 'Personal radar',
   'radar.lede': 'Project cards from Postgram (tag {tag}). Deadline first, then red · amber · green.',

@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { CLIENT_MODULES, useModuleStates } from '../lib/modules';
 import { ErrorBoundary } from './ErrorBoundary';
 import { t } from '../i18n/index.js';
@@ -9,10 +9,16 @@ export function ModuleOutlet({ id, today, onClose }: { id: string; today: string
   const mod = CLIENT_MODULES.find((m) => m.id === id);
   const enabled = Boolean(mod && states.data?.[id]);
   const known = states.data !== undefined;
+  // De lokale stand kan verouderd zijn (bijv. elders aangezet): eerst actueel ophalen, dan pas wegsturen.
+  const [checked, setChecked] = useState(false);
+  const refetch = states.refetch;
+  useEffect(() => {
+    void refetch().finally(() => setChecked(true));
+  }, [id, refetch]);
 
   useEffect(() => {
-    if (known && !enabled) onClose();
-  }, [known, enabled, onClose]);
+    if (checked && known && !enabled) onClose();
+  }, [checked, known, enabled, onClose]);
 
   if (!known) {
     return states.isError ? (
