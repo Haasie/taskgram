@@ -9,6 +9,8 @@ const app = new Hono();
 const initial = createFixtures();
 const entities = new Map<string, RawEntity>(initial.entities.map((e) => [e.id, { ...e }]));
 let edges: RawEdge[] = initial.edges.map((e) => ({ ...e }));
+// Nagebootste KOReader-syncserver (kosync) voor het Leesdossier.
+let kosyncDocs: unknown[] = [];
 
 function resetState() {
   entities.clear();
@@ -17,6 +19,7 @@ function resetState() {
     entities.set(e.id, { ...e });
   }
   edges = f.edges.map((e) => ({ ...e }));
+  kosyncDocs = [];
 }
 
 // Test hooks
@@ -42,6 +45,19 @@ app.post('/__bump/:id', (c) => {
   entity.version += 1;
   entity.updated_at = new Date().toISOString();
   return c.json({ entity });
+});
+
+app.post('/__kosync', async (c) => {
+  kosyncDocs = (await c.req.json()) as unknown[];
+  return c.json({ ok: true });
+});
+
+app.get('/kosync/syncs/documents', (c) => {
+  // KOReader stuurt de MD5 van het wachtwoord; md5('e2e-wachtwoord').
+  if (c.req.header('x-auth-user') !== 'e2e' || c.req.header('x-auth-key') !== crypto.createHash('md5').update('e2e-wachtwoord').digest('hex')) {
+    return c.json({ message: 'Unauthorized' }, 401);
+  }
+  return c.json({ documents: kosyncDocs });
 });
 
 // Bearer token check for /api/*

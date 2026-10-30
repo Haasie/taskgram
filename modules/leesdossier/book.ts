@@ -42,6 +42,10 @@ export type Book = {
   updated: string | null;
   /** Pad van de bijbehorende vault-note, als die er is. */
   vaultPath: string | null;
+  /** KOReader-document (hash) waaraan dit boek gekoppeld is; alleen de server zet dit. */
+  kosyncDocument: string | null;
+  /** Tijdstip (unix-seconden) van de laatst verwerkte KOReader-sync. */
+  kosyncAt: number | null;
 };
 
 export type BookFields = Omit<Book, 'id' | 'version'>;
@@ -62,7 +66,9 @@ const META_KEYS: Record<keyof BookFields, string> = {
   started: 'started',
   doneAt: 'done_at',
   updated: 'updated',
-  vaultPath: 'vault_path'
+  vaultPath: 'vault_path',
+  kosyncDocument: 'kosync_document',
+  kosyncAt: 'kosync_at'
 };
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -90,7 +96,9 @@ export function bookFromEntity(raw: { id: string; version: number; metadata: Rec
     started: dateOrNull(m.started),
     doneAt: dateOrNull(m.done_at),
     updated: dateOrNull(m.updated),
-    vaultPath: typeof m.vault_path === 'string' && m.vault_path ? m.vault_path : null
+    vaultPath: typeof m.vault_path === 'string' && m.vault_path ? m.vault_path : null,
+    kosyncDocument: typeof m.kosync_document === 'string' && m.kosync_document ? m.kosync_document : null,
+    kosyncAt: typeof m.kosync_at === 'number' && Number.isFinite(m.kosync_at) ? m.kosync_at : null
   };
 }
 

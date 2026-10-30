@@ -4,6 +4,7 @@ import { queryClient } from '../../src/lib/queries';
 import { enqueue } from '../../src/lib/serial';
 import { showToast } from '../../src/lib/toast';
 import type { Book, BookPatch } from './book';
+import type { KosyncDocument } from './kosync';
 
 // Alleen in het geheugen: boekdata komt altijd uit Postgram (niet in de offline cache, zie persist.ts).
 const KEY = ['module', 'leesdossier', 'books'] as const;
@@ -66,5 +67,39 @@ export async function deleteBook(id: string) {
     await request('DELETE', `${BASE}/${id}`);
   } catch (err) {
     failed('Verwijderen', err);
+  }
+}
+
+// --- KOReader-sync ---
+
+export type KosyncStatus = {
+  configured: boolean;
+  last: { at: string; ok: boolean; error?: string; documents: number; updated: string[]; unmatched: KosyncDocument[] } | null;
+};
+const KOSYNC_KEY = ['module', 'leesdossier', 'kosync'] as const;
+
+export const useKosync = () =>
+  useQuery({ queryKey: KOSYNC_KEY, queryFn: () => request<KosyncStatus>('GET', '/modules/leesdossier/kosync'), refetchInterval: 5 * 60_000 });
+
+export async function syncKosync() {
+  try {
+    const { last } = await request<{ last: KosyncStatus['last'] }>('POST', '/modules/leesdossier/kosync/sync');
+    queryClient.setQueryData<KosyncStatus>(KOSYNC_KEY, (old) => ({ configured: true, ...old, last }));
+    if (last && !last.ok) showToast(`KOReader-sync mislukt: ${last.error ?? ''}`);
+  } catch (err) {
+    showToast(`KOReader-sync mislukt: ${err instanceof Error ? err.message : ''}`);
+  }
+  void queryClient.invalidateQueries({ queryKey: KEY });
+}
+
+export async function adoptKosync(doc: KosyncDocument, cat: string) {
+  try {
+    const { book } = await request<{ book: Book }>('POST', `/modules/leesdossier/kosync/adopt/${encodeURIComponent(doc.document)}`, { cat });
+    setBooks((books) => [...books, book]);
+    queryClient.setQueryData<KosyncStatus>(KOSYNC_KEY, (old) =>
+      old?.last ? { ...old, last: { ...old.last, unmatched: old.last.unmatched.filter((d) => d.document !== doc.document) } } : old
+    );
+  } catch (err) {
+    failed('Toevoegen', err);
   }
 }

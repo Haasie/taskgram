@@ -121,6 +121,15 @@ A module is one entry in [`modules/registry.ts`](modules/registry.ts) plus one f
 - `server.ts` — optional, exports `routes(pg)`: its API under `/api/modules/<id>/…`, only reachable while
   the module is enabled.
 
+A module server receives a context (Postgram client, environment, time zone, `isEnabled()`) and may export
+`start(ctx)` for background work, which must check `isEnabled()` before every data call.
+
+**KOReader sync (Leesdossier).** Set `KOSYNC_URL`, `KOSYNC_USER` and `KOSYNC_PASSWORD` to a KOReader sync server
+that offers `GET /syncs/documents` (e.g. koreader-sync). Every 15 minutes, and via “Sync KOReader”, reading progress
+flows one way into the Leesdossier: books are matched on title (then remembered by document hash), progress is
+updated, a queued book starts when progress appears, and at 99% it is marked finished. Finished or stopped books are
+never reset. Unknown documents are listed so you can add them.
+
 New modules are off by default (`defaultEnabled`). `scripts/seed-leesdossier.ts <file.json>` is an idempotent
 importer for Leesdossier books (it never overwrites existing books and links each book to a mirrored vault
 note with a `related_to` edge).
