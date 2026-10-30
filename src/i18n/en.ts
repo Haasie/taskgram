@@ -406,4 +406,9 @@ export const en: Record<keyof typeof nl, string> = {
   'quickEntry.magicHint': 'Tip: *label +project !1-5 and at the end e.g. “tomorrow” or “due friday”',
   'shortcuts.favorite': 'Toggle favorite',
   'shortcuts.priority': 'Raise priority (cycles)',
+  'modules.loading': 'Loading module…',
+  'modules.loadFailed': 'Modules could not be loaded.',
+  'modules.settingsTitle': 'Modules',
+  'modules.settingsHint': 'A disabled module has no menu item and loads no data.',
+  'sidebar.modules': 'Modules',
 };

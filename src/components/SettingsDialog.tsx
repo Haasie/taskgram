@@ -7,6 +7,7 @@ import { currentSubscription, disablePush, enablePush, isIos, isStandalone, push
 import { showToast } from '../lib/toast.js';
 import { Modal } from './Modal.js';
 import { getLang, setLang, t, useLang } from '../i18n/index.js';
+import { CLIENT_MODULES, ModuleIcon, moduleDescription, moduleTitle, setModuleEnabled, useModuleStates } from '../lib/modules';
 
 export function SettingsDialog({
   open,
@@ -18,6 +19,7 @@ export function SettingsDialog({
   auth?: AuthInfo | null;
 }) {
   const lang = useLang();
+  const moduleStates = useModuleStates();
   const [loading, setLoading] = useState(true);
   const [serverEnabled, setServerEnabled] = useState(false);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -209,6 +211,32 @@ export function SettingsDialog({
               </select>
             </label>
           </div>
+
+          {/* Modules: aan/uit per module, bewaard op de server */}
+          <fieldset className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 space-y-3">
+            <legend className="px-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">{t('modules.settingsTitle')}</legend>
+            <p className="text-xs text-zinc-500">{t('modules.settingsHint')}</p>
+            {CLIENT_MODULES.map((m) => (
+              <label key={m.id} className="flex items-start justify-between gap-3 cursor-pointer">
+                <span className="flex items-start gap-2">
+                  <ModuleIcon module={m} className="mt-0.5 shrink-0 text-zinc-500" />
+                  <span>
+                    <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">{moduleTitle(m)}</span>
+                    <span className="block text-xs text-zinc-500">{moduleDescription(m)}</span>
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={moduleTitle(m)}
+                  checked={moduleStates.data?.[m.id] ?? false}
+                  disabled={!moduleStates.data}
+                  onChange={(e) => void setModuleEnabled(m.id, e.target.checked)}
+                  className="mt-1 rounded border-zinc-300 text-sky-500 focus:ring-sky-500 size-4"
+                />
+              </label>
+            ))}
+          </fieldset>
 
           {/* Push notifications section */}
           {loading ? (
