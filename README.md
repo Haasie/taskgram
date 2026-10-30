@@ -23,6 +23,11 @@ Taskgram only reads and writes tasks through the Postgram API.
   or `priveradar` becomes a card with status (red/amber/green), phase, next step, external party,
   deadline and risk, plus a bar of its open tasks per status. Edit those fields inline; they are stored
   in the project's metadata, so other tools reading Postgram see the same picture.
+- **Optional modules** — extra dashboards you switch on or off in Settings (stored on the server, so
+  every device agrees). A disabled module has no route, no menu item and its API refuses requests.
+  The first module is **Leesdossier** (`#/lezen`): a reading list with what you are reading now, a
+  numbered queue, a backlog per category, finished books with ratings, a quarterly goal, and a Markdown
+  export for an Obsidian reading list. It has its own "Dossier" (light) and "Terminal" (dark) styling.
 - **Recurring tasks** — daily, weekly on chosen days, monthly, or N days/weeks after completion.
   Completing one creates exactly one next occurrence; undo removes it again.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
@@ -70,6 +75,8 @@ allows task operations (plus read-only knowledge search for linking).
 | Task relations | Postgram edges between tasks (`blocked_by`, `part_of`, `depends_on`, `duplicates`, `related_to`) |
 | Board column | derived from `status` (inbox, next/active/scheduled, waiting, someday, done) |
 | Saved filters | stored per device in the browser (`localStorage`) |
+| Module on/off | `modules.json` in `DATA_DIR` on the Taskgram server |
+| Leesdossier book | a `document` tagged `book`; fields in `metadata` (`title`, `author`, `status` = `te-lezen`/`lezend`/`uit`/`gestaakt`, `cat`, `rating` 0–5, `progress` 0–100, `order` (0 = not queued), `note`, `src`, `verify`, `started`, `done_at`, `updated`, `vault_path`); `content` is "title — author" plus the note |
 | Context | `metadata.context` plus linked Postgram entities (edges) |
 
 ## Getting started
@@ -105,6 +112,18 @@ npm run hash-password     # create AUTH_PASSWORD_HASH for password mode
 Project layout: `src/` React client (Vite, Tailwind, TanStack Query, service worker in `src/sw.ts`),
 `server/` Hono server, `shared/` code used by both (dates, recurrence, list rules), `tests/` e2e suite
 with a mock Postgram.
+
+## Modules
+
+A module is one entry in [`modules/registry.ts`](modules/registry.ts) plus one folder `modules/<id>/`:
+
+- `client.tsx` — default export: the view (loaded lazily, only when the module is opened);
+- `server.ts` — optional, exports `routes(pg)`: its API under `/api/modules/<id>/…`, only reachable while
+  the module is enabled.
+
+New modules are off by default (`defaultEnabled`). `scripts/seed-leesdossier.ts <file.json>` is an idempotent
+importer for Leesdossier books (it never overwrites existing books and links each book to a mirrored vault
+note with a `related_to` edge).
 
 ## License
 

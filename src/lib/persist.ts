@@ -18,6 +18,6 @@ export const persistOptions: PersistQueryClientProviderProps['persistOptions'] =
   // Per build vernieuwd: een nieuwe versie leest nooit offline gegevens in een oud formaat.
   buster: typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : 'dev',
   dehydrateOptions: {
-    shouldDehydrateQuery: (q) => ['tasks', 'projects', 'me', 'logbook'].includes(String(q.queryKey[0]))
+    shouldDehydrateQuery: (q) => ['tasks', 'projects', 'me', 'logbook', 'modules'].includes(String(q.queryKey[0]))
   }
 };

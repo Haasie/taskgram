@@ -158,6 +158,12 @@ app.get('/api/entities', (c) => {
   if (type) {
     filtered = filtered.filter((e) => e.type === type);
   }
+  const tags = c.req.query('tags');
+  if (tags) {
+    const wanted = tags.split(',');
+    filtered = filtered.filter((e) => wanted.every((t) => e.tags.includes(t)));
+  }
+  filtered = filtered.filter((e) => e.status !== 'archived');
   const page = filtered.slice(offset, offset + limit);
   return c.json({
     items: page,

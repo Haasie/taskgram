@@ -477,3 +477,125 @@ test('E20: Werkradar toont projectkaarten en bewaart radarvelden', async ({ page
   await expect(page).toHaveURL(new RegExp(`#/project/${FIXTURE_IDS.RADAR_PROJECT}`));
   await expect(page.locator('main').getByText('Radartaak')).toBeVisible();
 });
+
+async function setModule(page: import('@playwright/test').Page, enabled: boolean) {
+  const res = await page.request.put('/api/modules/leesdossier', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } });
+  expect(res.ok()).toBe(true);
+}
+
+async function seedBook(metadata: Record<string, unknown>) {
+  const res = await fetch('http://localhost:4010/api/entities', {
+    method: 'POST',
+    headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'document', content: String(metadata.title), status: null, tags: ['book'], metadata })
+  });
+  if (!res.ok) throw new Error(`seed book failed: ${res.status}`);
+}
+
+test('E21: Leesdossier-module aan/uit, lege staat, bewerken en herladen @mobile', async ({ page, isMobile }) => {
+  await setModule(page, false);
+  const bookCalls: string[] = [];
+  page.on('request', (r) => r.url().includes('/api/modules/leesdossier/') && bookCalls.push(r.url()));
+
+  // Uit: geen menu-item, route bestaat niet, geen data-calls.
+  await page.goto('/#/lezen');
+  await expect(page).not.toHaveURL(/#\/lezen/);
+  await expect(page.getByRole('button', { name: 'Leesdossier' })).toHaveCount(0);
+  expect(bookCalls).toEqual([]);
+
+  // Aanzetten via instellingen.
+  await page.goto(isMobile ? '/' : '/#/today');
+  await page.getByRole('button', { name: 'Instellingen' }).first().click();
+  const toggle = page.getByRole('switch', { name: 'Leesdossier' });
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+  await page.getByRole('button', { name: 'Sluiten' }).click();
+  await page.locator('nav').getByRole('button', { name: 'Leesdossier' }).click();
+  await expect(page).toHaveURL(/#\/lezen/);
+
+  // Lege staat.
+  await expect(page.getByText('Nog geen boeken.')).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Lezend' })).toContainText('0');
+
+  // Toevoegen.
+  await page.getByRole('button', { name: '+ Boek' }).click();
+  await page.getByLabel('Titel', { exact: true }).fill('Zuid');
+  await page.getByLabel('Auteur', { exact: true }).fill('Ernest Shackleton');
+  await page.getByLabel('Categorie', { exact: true }).selectOption('reis');
+  await page.getByRole('button', { name: 'Opslaan' }).click();
+  const backlog = page.getByRole('region', { name: 'Backlog' });
+  await expect(backlog).toContainText('Zuid');
+  await expect(backlog).toContainText('Ernest Shackleton · Reizen & Cultuur');
+
+  // → Wachtrij, ▶ Start, voortgang, uit + sterren; overleeft herladen.
+  await backlog.getByRole('button', { name: '→ Wachtrij' }).click();
+  const queue = page.getByRole('region', { name: 'Wachtrij' });
+  await expect(queue).toContainText('Zuid');
+  await queue.getByRole('button', { name: '▶ Start' }).click();
+  const reading = page.getByRole('region', { name: 'Nu lezend' });
+  await expect(reading).toContainText('Zuid');
+  const slider = reading.getByRole('slider', { name: 'Voortgang Zuid' });
+  await slider.focus();
+  await slider.press('ArrowRight');
+  await slider.press('ArrowRight');
+  await expect(reading).toContainText('10%');
+  await expect.poll(async () => (await state()).entities.find((e) => e.metadata?.title === 'Zuid')?.metadata).toMatchObject({ status: 'lezend', progress: 10 });
+
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Nu lezend' })).toContainText('10%');
+
+  // Bewerken via het paneel.
+  await page.getByRole('region', { name: 'Nu lezend' }).getByRole('button', { name: 'Bewerk' }).click();
+  await page.getByLabel('Notitie', { exact: true }).fill('Endurance-expeditie, leiderschap');
+  await page.getByLabel('Aanbevolen door', { exact: true }).fill('@ijsbeer');
+  await page.getByRole('button', { name: 'Opslaan' }).click();
+  await expect(page.getByRole('region', { name: 'Nu lezend' })).toContainText('Endurance-expeditie');
+
+  await page.getByRole('region', { name: 'Nu lezend' }).getByRole('button', { name: '✓ Uit' }).click();
+  const done = page.getByRole('region', { name: 'Uitgelezen' });
+  await done.getByRole('button', { name: '4 sterren' }).click();
+  await expect(done.getByRole('group', { name: 'Beoordeling: 4 van 5' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Uitgelezen' }).getByRole('group', { name: 'Beoordeling: 4 van 5' })).toBeVisible();
+  await expect.poll(async () => (await state()).entities.find((e) => e.metadata?.title === 'Zuid')?.content).toBe('Zuid — Ernest Shackleton\n\nEndurance-expeditie, leiderschap');
+
+  // Export.
+  await page.getByRole('button', { name: 'Export MD' }).click();
+  await expect(page.getByRole('textbox', { name: 'Markdown' })).toHaveValue(/## Uitgelezen\n- \[\[Zuid\]\] — Ernest Shackleton — ★★★★☆/);
+  await page.keyboard.press('Escape');
+
+  // Verwijderen met bevestiging in de pagina.
+  await page.getByRole('region', { name: 'Uitgelezen' }).getByRole('button', { name: 'Zuid' }).click();
+  await page.getByRole('button', { name: 'Verwijder' }).click();
+  await page.getByRole('button', { name: 'Ja, verwijder' }).click();
+  await expect(page.getByText('Nog geen boeken.')).toBeVisible();
+
+  // Weer uit: menu-item weg, route weg.
+  // Elders uitgezet (bijv. ander apparaat): na herladen verdwijnen route en menu-item.
+  await setModule(page, false);
+  await page.reload();
+  await expect(page).not.toHaveURL(/#\/lezen/);
+  await expect(page.locator('nav').getByRole('button', { name: 'Leesdossier' })).toHaveCount(0);
+});
+
+test('E22: Leesdossier in licht en donker, ook op telefoonbreedte @mobile', async ({ page }, info) => {
+  await setModule(page, true);
+  await seedBook({ title: 'Ghost in the Wires', author: 'Kevin Mitnick', status: 'lezend', cat: 'sec', progress: 35, started: '2026-10-01' });
+  await seedBook({ title: 'The Nord Stream Conspiracy', author: 'Pancevski', status: 'te-lezen', cat: 'pol', order: 1, note: 'verschenen juni 2026' });
+  await seedBook({ title: 'Driehoek van macht', author: 'Alexander Stubb', status: 'te-lezen', cat: 'pol', order: 2, verify: true });
+  await seedBook({ title: 'How to Hack Like a Legend: Breaking Windows', status: 'te-lezen', cat: 'sec', verify: true });
+  await seedBook({ title: 'The Kite Runner', author: 'Khaled Hosseini', status: 'uit', cat: 'fic' });
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto('/#/lezen');
+    await expect(page.getByRole('region', { name: 'Nu lezend' })).toContainText('Ghost in the Wires');
+    await expect(page.getByText('te checken')).toHaveCount(2);
+    await expect(page.getByRole('region', { name: 'Gestaakt' })).toHaveCount(0);
+    const bg = await page.locator('.ld').evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bg).toBe(scheme === 'light' ? 'rgb(235, 231, 216)' : 'rgb(10, 15, 21)');
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `test-results/leesdossier-${info.project.name}-${scheme}.png`, fullPage: true });
+  }
+  await setModule(page, false);
+});

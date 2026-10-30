@@ -46,6 +46,7 @@ import { Toasts } from './components/Toasts';
 import { isListedProject, projectTitle, UiContext, type Ui } from './components/UiContext';
 import { WhenPicker, type PickerState } from './components/WhenPicker';
 import { LoginScreen } from './components/LoginScreen';
+import { ModuleOutlet } from './components/ModuleOutlet';
 import { t, useLang } from './i18n/index.js';
 
 const LIST_KEYS: ListKind[] = ['inbox', 'today', 'upcoming', 'anytime', 'someday', 'waiting', 'logbook'];
@@ -117,9 +118,9 @@ export function App() {
     if (isDesktop && route.kind === 'home') navigate({ kind: 'today' });
   }, [isDesktop, route.kind, navigate]);
 
-  const view: View | null = route.kind === 'home' ? null : route;
+  const view: View | null = route.kind === 'home' || route.kind === 'module' ? null : route;
   // Filterwijzigingen veranderen de query; dat is geen nieuwe weergave.
-  const viewKey = view ? JSON.stringify(view.kind === 'filter' ? { kind: 'filter', savedId: view.savedId } : view) : 'home';
+  const viewKey = route.kind === 'module' ? `module:${route.id}` : view ? JSON.stringify(view.kind === 'filter' ? { kind: 'filter', savedId: view.savedId } : view) : 'home';
   const [layout, setLayout] = useState<'list' | 'board'>('list');
   useEffect(() => {
     setSelectedId(null);
@@ -440,6 +441,7 @@ export function App() {
   };
 
   const content = (() => {
+    if (route.kind === 'module') return <ModuleOutlet id={route.id} today={today} onClose={() => navigate({ kind: 'home' }, { replace: true })} />;
     if (tasksQuery.isLoading) return <p className="p-10 text-sm text-zinc-400">{t('app.loadingTasks')}</p>;
     if (tasksQuery.isError && tasks.length === 0) {
       return (
@@ -580,14 +582,14 @@ export function App() {
         </DragOverlay>
       </DndContext>
 
-      <button
+      {route.kind !== 'module' && <button
         type="button"
         onClick={openEntry}
         aria-label={t('task.newTask')}
         className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 z-30 grid size-14 place-items-center rounded-full bg-sky-500 text-white shadow-lg shadow-sky-500/30 transition-transform active:scale-95 md:size-12"
       >
         <Plus size={26} />
-      </button>
+      </button>}
       {isDesktop && (
         <button type="button" onClick={() => setHelpOpen(true)} className="fixed bottom-6 left-[17rem] z-30 icon-btn text-zinc-400" title={`${t('shortcuts.title')} (?)`}>
           <Keyboard size={18} />

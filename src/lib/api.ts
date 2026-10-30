@@ -1,5 +1,6 @@
 import type { LinkedEntity, Project, SearchHit, Task, TaskMetadata, TaskStatus, Visibility } from '../../shared/types.js';
 import type { RadarPatch } from '../../shared/radar.js';
+import type { ModuleStates } from '../../modules/registry.js';
 
 export type ProjectPatch = { content?: string; status?: 'active' | 'done' | 'archived'; metadata?: RadarPatch };
 
@@ -15,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method,
     credentials: 'same-origin',
@@ -85,5 +86,8 @@ export const api = {
   unsubscribePush: (endpoint: string) => request<{ ok: true }>('DELETE', '/push/subscriptions', { endpoint }),
   savePushSettings: (settings: { digestEnabled?: boolean; digestTime?: string; language?: 'nl' | 'en' }) =>
     request<{ settings: { digestEnabled: boolean; digestTime: string; language?: 'nl' | 'en' } }>('PUT', '/push/settings', settings),
-  testPush: (endpoint: string) => request<{ ok: true }>('POST', '/push/test', { endpoint })
+  testPush: (endpoint: string) => request<{ ok: true }>('POST', '/push/test', { endpoint }),
+  modules: () => request<{ modules: ModuleStates }>('GET', '/modules').then((r) => r.modules),
+  setModuleEnabled: (id: string, enabled: boolean) =>
+    request<{ modules: ModuleStates }>('PUT', `/modules/${id}`, { enabled }).then((r) => r.modules)
 };

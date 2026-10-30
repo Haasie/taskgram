@@ -13,6 +13,7 @@ import { useSyncStatus } from '../lib/sync';
 import { SyncIndicator } from './SyncIndicator';
 import { t, useLang } from '../i18n/index.js';
 import { isRadarProject, radarMeta, radarTitle } from '../../shared/radar.js';
+import { ModuleIcon, moduleTitle, useEnabledModules } from '../lib/modules';
 
 type Props = {
   route: Route;
@@ -59,6 +60,7 @@ function sortForSidebar(projects: Project[]): Project[] {
 
 export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProject, onSearch, onOpenConflicts, onOpenSettings, user }: Props) {
   useLang();
+  const modules = useEnabledModules();
   const { online } = useSyncStatus();
   const savedFilters = useSyncExternalStore(subscribeSavedFilters, loadSavedFilters);
   const favorites = tasks.filter((t) => isOpen(t) && isFavorite(t)).length;
@@ -132,6 +134,21 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
           />
         )}
       </div>
+
+      {modules.length > 0 && (
+        <div className="space-y-0.5" aria-label={t('sidebar.modules')} role="group">
+          {modules.map((m) => (
+            <Item
+              key={m.id}
+              id={`module:${m.id}`}
+              active={route.kind === 'module' && route.id === m.id}
+              onClick={() => onNavigate({ kind: 'module', id: m.id })}
+              icon={<ModuleIcon module={m} className="text-amber-700 dark:text-amber-400" />}
+              label={moduleTitle(m)}
+            />
+          ))}
+        </div>
+      )}
 
       {AREAS.map((area) => {
         const areaProjects = projects.filter((p) => p.visibility === area.id && p.status !== 'done');

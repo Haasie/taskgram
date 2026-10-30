@@ -12,6 +12,6 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["server", "shared"],
+  "include": ["server", "shared", "modules/registry.ts", "modules/*/server.ts"],
   "exclude": ["**/*.test.ts"]
 }

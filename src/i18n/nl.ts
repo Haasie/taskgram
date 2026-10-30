@@ -404,4 +404,9 @@ export const nl = {
   'quickEntry.magicHint': 'Tip: *label +project !1-5 en aan het eind bijv. “morgen” of “deadline vrijdag”',
   'shortcuts.favorite': 'Favoriet aan/uit',
   'shortcuts.priority': 'Prioriteit verhogen (rondgaand)',
+  'modules.loading': 'Module laden…',
+  'modules.loadFailed': 'Modules konden niet worden geladen.',
+  'modules.settingsTitle': 'Modules',
+  'modules.settingsHint': 'Een uitgeschakelde module heeft geen menu-item en haalt geen gegevens op.',
+  'sidebar.modules': 'Modules',
 } as const;

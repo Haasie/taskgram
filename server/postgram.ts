@@ -87,6 +87,7 @@ export function createPostgramClient(config: Config) {
     listTasksPage: (status: string, limit: number, offset: number) =>
       request<{ items: RawEntity[]; total: number }>('GET', '/api/tasks', { query: { status, limit, offset } }),
     listProjects: () => listAll('/api/entities', { type: 'project' }),
+    listEntities: (type: string, tags: string[]) => listAll('/api/entities', { type, tags: tags.join(',') }),
     getEntity: (id: string) =>
       request<{ entity: RawEntity }>('GET', `/api/entities/${encodeURIComponent(id)}`).then((r) => r.entity),
     createTask: (body: unknown) => request<{ entity: RawEntity }>('POST', '/api/tasks', { body }).then((r) => r.entity),
