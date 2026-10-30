@@ -19,6 +19,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'script',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
+      // Moduleletters (alleen Latin, ~100 kB) ook offline beschikbaar.
+      injectManifest: { globPatterns: ['**/*.{js,css,html}', '**/*-latin-[0-9]*-normal-*.woff2'] },
       manifest: {
         name: 'Taskgram',
         short_name: 'Taskgram',
