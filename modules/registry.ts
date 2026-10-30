@@ -1,5 +1,16 @@
 import type { ModuleManifest } from './types.js';
 
+const RADAR_ICON = [
+  'M19.07 4.93A10 10 0 0 0 6.99 3.34',
+  'M4 6h.01',
+  'M2.29 9.62A10 10 0 1 0 21.31 8.35',
+  'M16.24 7.76A6 6 0 1 0 8.23 16.67',
+  'M12 18h.01',
+  'M17.99 11.66A6 6 0 0 1 15.77 16.67',
+  'M10 12a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+  'm13.41 10.59 5.66-5.66'
+];
+
 /** Alle modules. Een nieuwe module: één entry hier en een map modules/<id>/ (zie types.ts). */
 export const MODULES: readonly ModuleManifest[] = [
   {
@@ -15,6 +26,31 @@ export const MODULES: readonly ModuleManifest[] = [
       'M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z'
     ],
     defaultEnabled: false
+  },
+  {
+    id: 'werkradar',
+    route: 'radar/work',
+    area: 'work',
+    title: { nl: 'Werkradar', en: 'Work radar' },
+    description: {
+      nl: 'Projectkaarten met tag werkradar: status, fase, volgende stap, deadline en open taken.',
+      en: 'Project cards tagged werkradar: status, phase, next step, deadline and open tasks.'
+    },
+    icon: RADAR_ICON,
+    // Bestond al vóór het modulesysteem; standaard aan zodat er na een update niets verdwijnt.
+    defaultEnabled: true
+  },
+  {
+    id: 'priveradar',
+    route: 'radar/personal',
+    area: 'personal',
+    title: { nl: 'Privéradar', en: 'Personal radar' },
+    description: {
+      nl: 'Projectkaarten met tag priveradar: status, fase, volgende stap, deadline en open taken.',
+      en: 'Project cards tagged priveradar: status, phase, next step, deadline and open tasks.'
+    },
+    icon: RADAR_ICON,
+    defaultEnabled: true
   }
 ];
 

@@ -35,7 +35,6 @@ const createBody = fields.required({ title: true });
 const updateBody = fields.extend({ version: z.number().int().positive() }).strict();
 const adoptBody = z.object({ cat: z.enum(CATEGORY_IDS).default('ov') }).strict();
 
-const SYNC_EVERY_MS = 15 * 60_000;
 
 type SyncResult = {
   at: string;
@@ -188,13 +187,17 @@ export function routes(ctx: ModuleContext) {
   return api;
 }
 
-/** Elke 15 minuten syncen, maar alleen als de module aan staat en kosync geconfigureerd is. */
+/**
+ * Periodiek syncen (KOSYNC_SYNC_MINUTES, standaard 15; 0 = alleen via de knop), maar alleen als de
+ * module aan staat en kosync geconfigureerd is.
+ */
 export function start(ctx: ModuleContext) {
-  if (!kosyncConfig(ctx.env)) return;
+  const minutes = Number(ctx.env.KOSYNC_SYNC_MINUTES ?? 15);
+  if (!kosyncConfig(ctx.env) || !(minutes > 0)) return;
   const tick = () => {
     const sync = ctx.state.sync as (() => Promise<unknown>) | undefined;
     if (ctx.isEnabled() && sync) void sync();
   };
   setTimeout(tick, 20_000);
-  setInterval(tick, SYNC_EVERY_MS);
+  setInterval(tick, minutes * 60_000);
 }

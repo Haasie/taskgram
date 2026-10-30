@@ -455,7 +455,8 @@ test('E13: Project board moves tasks between columns', async ({ page }) => {
 
 test('E20: Werkradar toont projectkaarten en bewaart radarvelden', async ({ page }) => {
   await page.goto('/#/today');
-  await page.locator('nav').getByRole('button', { name: 'Radar', exact: true }).click();
+  await page.locator('nav').getByRole('button', { name: 'Werkradar', exact: true }).click();
+  await expect(page).toHaveURL(/#\/radar\/work/);
   await expect(page.getByTestId('radar-view')).toBeVisible();
   const card = page.getByTestId('radar-card').filter({ hasText: 'Radarproject' });
   await expect(card).toContainText('Oranje');
@@ -639,4 +640,30 @@ test('E23: Leesdossier synct voortgang uit KOReader en voegt onbekende boeken to
   await expect(page.getByRole('status').filter({ hasText: 'KOReader-sync' })).toContainText('niets nieuws');
   expect((await state()).entities.filter((e) => e.tags.includes('book') && e.status !== 'archived')).toHaveLength(2);
   await setModule(page, false);
+});
+
+test('E24: Werkradar en Privéradar zijn modules met een eigen schakelaar', async ({ page }) => {
+  const set = async (id: string, enabled: boolean) =>
+    expect((await page.request.put(`/api/modules/${id}`, { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } })).ok()).toBe(true);
+  await set('werkradar', true);
+  await page.goto('/#/today');
+  const nav = page.locator('nav');
+  await expect(nav.getByRole('button', { name: 'Werkradar', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Instellingen' }).first().click();
+  const toggle = page.getByRole('switch', { name: 'Werkradar' });
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await page.getByRole('button', { name: 'Sluiten' }).click();
+  await expect(nav.getByRole('button', { name: 'Werkradar', exact: true })).toHaveCount(0);
+
+  // Oude link werkt niet meer zolang de module uit staat.
+  await page.goto('/#/radar/work');
+  await expect(page).not.toHaveURL(/#\/radar\/work/);
+
+  await set('werkradar', true);
+  await page.goto('/#/radar/work');
+  await page.reload();
+  await expect(page.getByTestId('radar-view')).toBeVisible();
 });

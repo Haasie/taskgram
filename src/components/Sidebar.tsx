@@ -1,5 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import { Plus, Search, Box, Settings, Radar } from 'lucide-react';
+import { Plus, Search, Box, Settings } from 'lucide-react';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import type { Project, Task, Visibility } from '../../shared/types.js';
@@ -135,9 +135,9 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
         )}
       </div>
 
-      {modules.length > 0 && (
+      {modules.some((m) => !m.area) && (
         <div className="space-y-0.5" aria-label={t('sidebar.modules')} role="group">
-          {modules.map((m) => (
+          {modules.filter((m) => !m.area).map((m) => (
             <Item
               key={m.id}
               id={`module:${m.id}`}
@@ -176,15 +176,18 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
                 <Plus size={15} />
               </button>
             </div>
-            {areaProjects.some((p) => isRadarProject(p, area.id)) && (
-              <Item
-                id={`radar:${area.id}`}
-                active={route.kind === 'radar' && route.area === area.id}
-                onClick={() => onNavigate({ kind: 'radar', area: area.id })}
-                icon={<Radar size={16} className={area.id === 'work' ? 'text-sky-600' : 'text-emerald-600'} />}
-                label={t('radar.sidebar')}
-              />
-            )}
+            {modules
+              .filter((m) => m.area === area.id)
+              .map((m) => (
+                <Item
+                  key={m.id}
+                  id={`module:${m.id}`}
+                  active={route.kind === 'module' && route.id === m.id}
+                  onClick={() => onNavigate({ kind: 'module', id: m.id })}
+                  icon={<ModuleIcon module={m} className={area.id === 'work' ? 'text-sky-600' : 'text-emerald-600'} />}
+                  label={moduleTitle(m)}
+                />
+              ))}
             {sortForSidebar(areaProjects).map((p) => {
               const open = tasks.filter((t) => projectId(t) === p.id && isOpen(t)).length;
               return (

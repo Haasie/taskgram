@@ -19,7 +19,7 @@ Taskgram only reads and writes tasks through the Postgram API.
   (blocked by, subtask of, depends on, duplicate of, related), duplicating tasks and Quick Add Magic:
   type `Call supplier +renovation *phone !4 tomorrow` to set project, label, priority and date at once
   (dates are only picked up at the end of the title, e.g. `… tomorrow` or `… due friday`).
-- **Radar per area** — a project board for Work and Personal: every Postgram project tagged `werkradar`
+- **Radar per area** (modules *Werkradar* and *Privéradar*, on by default) — a project board for Work and Personal: every Postgram project tagged `werkradar`
   or `priveradar` becomes a card with status (red/amber/green), phase, next step, external party,
   deadline and risk, plus a bar of its open tasks per status. Edit those fields inline; they are stored
   in the project's metadata, so other tools reading Postgram see the same picture.
@@ -125,7 +125,7 @@ A module server receives a context (Postgram client, environment, time zone, `is
 `start(ctx)` for background work, which must check `isEnabled()` before every data call.
 
 **KOReader sync (Leesdossier).** Set `KOSYNC_URL`, `KOSYNC_USER` and `KOSYNC_PASSWORD` to a KOReader sync server
-that offers `GET /syncs/documents` (e.g. koreader-sync). Every 15 minutes, and via “Sync KOReader”, reading progress
+that offers `GET /syncs/documents` (e.g. koreader-sync). Every 15 minutes (`KOSYNC_SYNC_MINUTES`, 0 = only manual), and via “Sync KOReader”, reading progress
 flows one way into the Leesdossier: books are matched on title (then remembered by document hash), progress is
 updated, a queued book starts when progress appears, and at 99% it is marked finished. Finished or stopped books are
 never reset. Unknown documents are listed so you can add them.

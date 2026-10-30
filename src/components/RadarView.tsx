@@ -16,7 +16,7 @@ import {
   type Rag
 } from '../../shared/radar.js';
 import { formatDeadline, formatLong } from '../../shared/dates.js';
-import { updateProject } from '../lib/queries';
+import { updateProject, useProjects, useTasks } from '../lib/queries';
 import { useSyncStatus } from '../lib/sync';
 import { t, useLang } from '../i18n/index.js';
 import { projectTitle } from './UiContext';
@@ -45,6 +45,21 @@ type Props = {
   today: string;
   onOpenProject: (id: string) => void;
 };
+
+/** Ingang voor de modules Werkradar en Privéradar: haalt taken en projecten zelf op. */
+export function RadarModule({ area, today }: { area: Visibility; today: string }) {
+  const tasks = useTasks().data;
+  const projects = useProjects().data;
+  return (
+    <RadarView
+      area={area}
+      tasks={tasks ?? []}
+      projects={projects ?? []}
+      today={today}
+      onOpenProject={(id) => (window.location.hash = `#/project/${id}`)}
+    />
+  );
+}
 
 export function RadarView({ area, tasks, projects, today, onOpenProject }: Props) {
   useLang();

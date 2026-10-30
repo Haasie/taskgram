@@ -10,7 +10,6 @@ export type View =
   | { kind: ListKind }
   | { kind: 'project'; id: string }
   | { kind: 'area'; area: Visibility }
-  | { kind: 'radar'; area: Visibility }
   | { kind: 'favorites' }
   | { kind: 'filter'; query: string; savedId?: string };
 
@@ -105,8 +104,6 @@ export function buildSections(
     const filter = queryToFilter(view.query);
     return [{ key: 'filter', tasks: sortTasks(open.filter((t) => matchesFilter(t, filter, today)), filter.sort) }];
   }
-
-  if (view.kind === 'radar') return [];
 
   if (view.kind === 'area') {
     const areaProjects = projects.filter((p) => p.visibility === view.area);
