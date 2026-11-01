@@ -56,7 +56,7 @@ function setup(moduleEnv: Record<string, string> = {}) {
 describe('modules', () => {
   it('staan standaard uit en de API weigert dan zonder Postgram te raken', async () => {
     const { pg, call } = setup();
-    expect((await (await call('GET', '')).json()).modules).toEqual({ leesdossier: false, werkradar: true, priveradar: true, beheer: false });
+    expect((await (await call('GET', '')).json()).modules).toMatchObject({ leesdossier: false, werkradar: true, priveradar: true });
     const res = await call('GET', '/leesdossier/books');
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe('MODULE_DISABLED');
@@ -67,13 +67,13 @@ describe('modules', () => {
     const { call } = setup();
     expect((await call('GET', '/werkradar/anything')).status).toBe(404);
     await call('PUT', '/werkradar', { enabled: false });
-    expect((await (await call('GET', '')).json()).modules).toEqual({ leesdossier: false, werkradar: false, priveradar: true, beheer: false });
+    expect((await (await call('GET', '')).json()).modules).toMatchObject({ leesdossier: false, werkradar: false, priveradar: true });
   });
 
   it('bewaart de schakelaar en weigert onbekende modules', async () => {
     const { call } = setup();
-    expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true, beheer: false } });
-    expect((await (await call('GET', '')).json()).modules).toEqual({ leesdossier: true, werkradar: true, priveradar: true, beheer: false });
+    expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toMatchObject({ modules: { leesdossier: true, werkradar: true, priveradar: true } });
+    expect((await (await call('GET', '')).json()).modules).toMatchObject({ leesdossier: true, werkradar: true, priveradar: true });
     expect((await call('PUT', '/bestaat-niet', { enabled: true })).status).toBe(404);
     expect((await call('PUT', '/leesdossier', { enabled: 'ja' })).status).toBe(400);
   });
@@ -173,50 +173,13 @@ describe('leesdossier: KOReader-sync', () => {
   });
 });
 
-describe('beheer: Supervisor-status', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it('zonder SUPERVISOR_URL: niet gekoppeld, geen call', async () => {
-    const { call } = setup();
-    await call('PUT', '/beheer', { enabled: true });
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    expect(await (await call('GET', '/beheer/status')).json()).toEqual({ configured: false, status: null });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('haalt de status met het token op de server en geeft alleen de omgezette velden door', async () => {
-    const { call } = setup({ SUPERVISOR_URL: 'http://supervisor.test:8090/', SUPERVISOR_TOKEN: 'geheim' });
-    await call('PUT', '/beheer', { enabled: true });
-    const fetchMock = vi.fn(async (url: string, init: { headers: Record<string, string> }) => {
-      expect(url).toBe('http://supervisor.test:8090/api/status');
-      expect(init.headers.authorization).toBe('Bearer geheim');
-      return new Response(JSON.stringify({ snapshot: { containers_total: 5, containers_not_running: [], external_ip: '1.2.3.4' } }), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const res = await call('GET', '/beheer/status');
-    const body = await res.json();
-    expect(body.configured).toBe(true);
-    expect(body.status.containers).toEqual({ total: 5, notRunning: [] });
-    expect(JSON.stringify(body)).not.toContain('1.2.3.4');
-    expect(JSON.stringify(body)).not.toContain('geheim');
-  });
-
-  it('meldt een afgewezen token als upstream-fout en weigert als de module uit staat', async () => {
-    const { call } = setup({ SUPERVISOR_URL: 'http://supervisor.test:8090', SUPERVISOR_TOKEN: 'fout' });
-    await call('PUT', '/beheer', { enabled: true });
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('Unauthorized', { status: 401 })));
-    const res = await call('GET', '/beheer/status');
-    expect(res.status).toBe(502);
-    expect((await res.json()).error.code).toBe('SUPERVISOR_AUTH');
-    await call('PUT', '/beheer', { enabled: false });
-    expect((await call('GET', '/beheer/status')).status).toBe(404);
-  });
-});
-
 describe('module-discovery en instellingen', () => {
   it('vindt modules aan hun module.ts, gesorteerd op order', () => {
-    expect(MODULES.map((m) => m.id)).toEqual(['leesdossier', 'werkradar', 'priveradar', 'beheer']);
+    // Een overlay-build kan modules toevoegen; de core-modules moeten er altijd zijn, in deze volgorde.
+    const ids = MODULES.map((m) => m.id);
+    expect(ids.filter((id) => ['leesdossier', 'werkradar', 'priveradar'].includes(id))).toEqual(['leesdossier', 'werkradar', 'priveradar']);
+    const orders = MODULES.map((m) => m.order ?? 100);
+    expect(orders).toEqual([...orders].sort((x, y) => x - y));
   });
 
   it('geeft instellingen met standaardwaarden en valideert wijzigingen per veld', async () => {
