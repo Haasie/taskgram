@@ -1,6 +1,8 @@
 import type { LinkedEntity, Project, SearchHit, Task, TaskMetadata, TaskStatus, Visibility } from '../../shared/types.js';
 import type { RadarPatch } from '../../shared/radar.js';
-import type { ModuleStates } from '../../modules/registry.js';
+import type { ModuleSettings, ModuleStates } from '../../modules/types.js';
+
+export type ModulesInfo = { modules: ModuleStates; settings: Record<string, ModuleSettings> };
 
 export type ProjectPatch = { content?: string; status?: 'active' | 'done' | 'archived'; metadata?: RadarPatch };
 
@@ -10,7 +12,9 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
-    message: string
+    message: string,
+    /** Veldfouten van de server (bijv. bij ongeldige module-instellingen). */
+    readonly issues?: Record<string, string>
   ) {
     super(message);
   }
@@ -35,7 +39,8 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   }
   const payload = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new ApiError(res.status, payload?.error?.code ?? 'ERROR', payload?.error?.message ?? res.statusText);
+    const issues = payload?.error?.issues && !Array.isArray(payload.error.issues) ? (payload.error.issues as Record<string, string>) : undefined;
+    throw new ApiError(res.status, payload?.error?.code ?? 'ERROR', payload?.error?.message ?? res.statusText, issues);
   }
   return payload as T;
 }
@@ -87,7 +92,9 @@ export const api = {
   savePushSettings: (settings: { digestEnabled?: boolean; digestTime?: string; language?: 'nl' | 'en' }) =>
     request<{ settings: { digestEnabled: boolean; digestTime: string; language?: 'nl' | 'en' } }>('PUT', '/push/settings', settings),
   testPush: (endpoint: string) => request<{ ok: true }>('POST', '/push/test', { endpoint }),
-  modules: () => request<{ modules: ModuleStates }>('GET', '/modules').then((r) => r.modules),
+  modules: () => request<ModulesInfo>('GET', '/modules'),
   setModuleEnabled: (id: string, enabled: boolean) =>
-    request<{ modules: ModuleStates }>('PUT', `/modules/${id}`, { enabled }).then((r) => r.modules)
+    request<{ modules: ModuleStates }>('PUT', `/modules/${id}`, { enabled }).then((r) => r.modules),
+  setModuleSettings: (id: string, values: ModuleSettings, reset: string[] = []) =>
+    request<{ settings: ModuleSettings }>('PUT', `/modules/${id}/settings`, { values, reset }).then((r) => r.settings)
 };

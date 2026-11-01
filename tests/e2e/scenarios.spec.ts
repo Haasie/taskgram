@@ -725,3 +725,40 @@ test('E25: Beheer toont de Supervisor-status met woorden én vormen, ook als er 
   await expect(tiles.getByRole('listitem').filter({ hasText: 'ZFS' })).toContainText('■ ALARM');
   await set(false);
 });
+
+test('E26: module-instellingen in de UI en Leesdossier in het Engels', async ({ page }) => {
+  await setModule(page, true);
+  await seedBook({ title: 'Dune', author: 'Frank Herbert', status: 'uit', cat: 'sf', done_at: new Date().toISOString().slice(0, 10) });
+  await page.goto('/#/today');
+  await page.getByRole('button', { name: 'Instellingen' }).first().click();
+  await page.getByText('Instellingen — Leesdossier').click();
+  await page.getByLabel('Doel per kwartaal (boeken)').fill('6');
+  await page.getByRole('button', { name: 'Toevoegen' }).first().click();
+  await page.getByLabel('Id 9').fill('sf');
+  await page.getByLabel('Label 9').fill('Sciencefiction');
+  await page.getByRole('button', { name: 'Opslaan', exact: true }).first().click();
+  await expect(page.getByText('Instellingen opgeslagen')).toBeVisible();
+
+  // Ongeldige invoer: melding per veld, niets opgeslagen.
+  await page.getByLabel('Doel per kwartaal (boeken)').fill('-3');
+  await page.getByRole('button', { name: 'Opslaan', exact: true }).first().click();
+  await expect(page.getByRole('alert').filter({ hasText: 'minimaal 0' })).toBeVisible();
+  await page.getByRole('button', { name: 'Sluiten' }).click();
+
+  await page.goto('/#/lezen');
+  const tiles = page.getByRole('list', { name: 'Tellers' });
+  await expect(tiles).toContainText('1/6');
+  await expect(page.getByRole('group', { name: 'Filter op categorie' })).toContainText('Sciencefiction');
+
+  // Taal naar Engels: module-teksten volgen.
+  await page.evaluate(() => localStorage.setItem('taskgram-lang', 'en'));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Reading file' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Counters' })).toContainText('Goal');
+  await expect(page.getByRole('region', { name: 'Finished' })).toContainText('Dune');
+  await page.evaluate(() => localStorage.setItem('taskgram-lang', 'nl'));
+
+  const res = await page.request.put('/api/modules/leesdossier/settings', { data: { reset: ['quarterGoal', 'categories'] }, headers: { 'x-requested-with': 'taskgram' } });
+  expect(res.ok()).toBe(true);
+  await setModule(page, false);
+});

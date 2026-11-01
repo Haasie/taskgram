@@ -54,18 +54,19 @@ export function radarMeta(p: Pick<Project, 'metadata'>): RadarMeta {
   };
 }
 
-export function isRadarProject(p: Pick<Project, 'tags' | 'visibility' | 'status'>, area?: Visibility): boolean {
+/** `tag` overschrijft de standaard-tag van het gebied (instelling van de Radar-module). */
+export function isRadarProject(p: Pick<Project, 'tags' | 'visibility' | 'status'>, area?: Visibility, tag?: string): boolean {
   if (p.status === 'done' || p.status === 'archived') return false;
   const tags = p.tags ?? [];
   if (area) {
-    const tag = RADAR_TAG[area];
-    return !!tag && tags.includes(tag);
+    const t = tag || RADAR_TAG[area];
+    return !!t && tags.includes(t);
   }
   return tags.includes('werkradar') || tags.includes('priveradar');
 }
 
-export function radarProjects(projects: Project[], area: Visibility): Project[] {
-  return projects.filter((p) => isRadarProject(p, area));
+export function radarProjects(projects: Project[], area: Visibility, tag?: string): Project[] {
+  return projects.filter((p) => isRadarProject(p, area, tag));
 }
 
 const RAG_ORDER: Record<Rag, number> = { rood: 0, oranje: 1, groen: 2 };

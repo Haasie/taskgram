@@ -1,6 +1,4 @@
-import { CATEGORIES, categoryName, type Book, type BookPatch, type BookStatus, type Category } from './book.js';
-
-export const QUARTER_GOAL = 4;
+import { categoryIndex, type Book, type BookPatch, type BookStatus, type Category, type CategoryList } from './book.js';
 
 export const isQueued = (b: Book) => b.status === 'te-lezen' && b.order > 0;
 export const isBacklog = (b: Book) => b.status === 'te-lezen' && b.order <= 0;
@@ -30,14 +28,13 @@ export function matches(b: Book, query: string, cat: Category | ''): boolean {
 
 const byTitle = (a: Book, b: Book) => a.title.localeCompare(b.title, 'nl');
 
-export function sections(books: Book[]) {
+/** Secties; de backlog staat in de volgorde van de ingestelde categorieën. */
+export function sections(books: Book[], cats: CategoryList) {
   const of = (s: BookStatus) => books.filter((b) => b.status === s);
   return {
     reading: of('lezend').sort(byTitle),
     queue: books.filter(isQueued).sort((a, b) => a.order - b.order),
-    backlog: books
-      .filter(isBacklog)
-      .sort((a, b) => categoryName(a.cat).localeCompare(categoryName(b.cat), 'nl') || byTitle(a, b)),
+    backlog: books.filter(isBacklog).sort((a, b) => categoryIndex(cats, a.cat) - categoryIndex(cats, b.cat) || byTitle(a, b)),
     done: of('uit').sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? '') || byTitle(a, b)),
     stopped: of('gestaakt').sort(byTitle)
   };
@@ -83,17 +80,19 @@ function link(b: Book) {
 }
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
 
-/** Markdown voor 20 Privé/23 Persoonlijk/Leeslijst.md. */
-export function exportMarkdown(books: Book[]): string {
-  const s = sections(books);
-  const out: string[] = ['## Nu lezend', ...s.reading.map((b) => `- ${link(b)}`)];
-  out.push('', '## Volgende', ...s.queue.map((b, i) => `${i + 1}. ${link(b)}`));
-  out.push('', '## Backlog');
-  for (const [id, name] of CATEGORIES) {
-    const list = s.backlog.filter((b) => b.cat === id).sort(byTitle);
-    if (list.length) out.push('', `### ${name}`, ...list.map((b) => `- ${link(b)}`));
-  }
-  out.push('', '## Uitgelezen', ...s.done.map((b) => `- ${link(b)}${b.rating ? ` — ${stars(b.rating)}` : ''}`));
-  if (s.stopped.length) out.push('', '## Gestaakt', ...s.stopped.map((b) => `- ${link(b)}`));
+export type ExportHeadings = { reading: string; next: string; backlog: string; done: string; stopped: string };
+
+/** Markdown voor de leeslijst in je vault (koppen in de taal van de gebruiker, backlog per ingestelde categorie). */
+export function exportMarkdown(books: Book[], cats: CategoryList, h: ExportHeadings): string {
+  const s = sections(books, cats);
+  const out: string[] = [`## ${h.reading}`, ...s.reading.map((b) => `- ${link(b)}`)];
+  out.push('', `## ${h.next}`, ...s.queue.map((b, i) => `${i + 1}. ${link(b)}`));
+  out.push('', `## ${h.backlog}`);
+  cats.forEach((cat, i) => {
+    const list = s.backlog.filter((b) => categoryIndex(cats, b.cat) === i).sort(byTitle);
+    if (list.length) out.push('', `### ${cat.label}`, ...list.map((b) => `- ${link(b)}`));
+  });
+  out.push('', `## ${h.done}`, ...s.done.map((b) => `- ${link(b)}${b.rating ? ` — ${stars(b.rating)}` : ''}`));
+  if (s.stopped.length) out.push('', `## ${h.stopped}`, ...s.stopped.map((b) => `- ${link(b)}`));
   return out.join('\n') + '\n';
 }

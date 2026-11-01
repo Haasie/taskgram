@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { bookContent, bookFromEntity, bookMetadata, dedupeKey, type Book } from './book';
 import { counts, exportMarkdown, matches, quarterOf, sections, statusPatch, swapInQueue } from './logic';
+import manifest from './module';
+import { localize, optionList } from '../settings';
+
+// De standaardcategorieën uit het manifest, zoals de view ze in het Nederlands krijgt.
+const CATS = optionList(manifest.settings?.find((d) => d.key === 'categories')?.default).map((o) => ({ id: o.id, label: localize(o.label, 'nl') }));
+const H = { reading: 'Nu lezend', next: 'Volgende', backlog: 'Backlog', done: 'Uitgelezen', stopped: 'Gestaakt' };
 
 const book = (over: Partial<Book>): Book => ({
   ...bookFromEntity({ id: over.id ?? over.title ?? 'x', version: 1, metadata: {} }),
@@ -18,13 +24,20 @@ const library = [
 ];
 
 describe('leesdossier', () => {
+  it('zet onbekende categorieën onder de laatste en sorteert de backlog op categorievolgorde', () => {
+    const cats = [{ id: 'b', label: 'Bèta' }, { id: 'a', label: 'Alfa' }, { id: 'rest', label: 'Rest' }];
+    const s = sections([book({ id: '1', title: 'Z', cat: 'a' }), book({ id: '2', title: 'Y', cat: 'b' }), book({ id: '3', title: 'X', cat: 'weg' })], cats);
+    expect(s.backlog.map((b) => b.id)).toEqual(['2', '1', '3']);
+    expect(exportMarkdown([book({ title: 'X', cat: 'weg' })], cats, H)).toContain('### Rest\n- [[X]]');
+  });
+
   it('telt per kwartaal op doneAt', () => {
     expect(quarterOf('2026-10-29')).toBe('2026-Q4');
     expect(counts(library, '2026-10-29')).toMatchObject({ reading: 1, queue: 2, backlog: 2, done: 2, doneThisQuarter: 1 });
   });
 
   it('verdeelt in secties; wachtrij op volgorde, backlog per categorie', () => {
-    const s = sections(library);
+    const s = sections(library, CATS);
     expect(s.queue.map((b) => b.id)).toEqual(['n', 'p']);
     expect(s.backlog.map((b) => b.id)).toEqual(['b', 'z']);
     expect(s.done.map((b) => b.id)).toEqual(['k', 'o']);
@@ -49,7 +62,7 @@ describe('leesdossier', () => {
   });
 
   it('exporteert Markdown met wikilinks, nummering en sterren', () => {
-    expect(exportMarkdown(library)).toBe(
+    expect(exportMarkdown(library, CATS, H)).toBe(
       [
         '## Nu lezend',
         '- [[Ghost in the Wires]] — Kevin Mitnick',
@@ -75,10 +88,14 @@ describe('leesdossier', () => {
   });
 
   it('linkt naar de vault-note met alias als de bestandsnaam afwijkt', () => {
-    const md = exportMarkdown([
+    const md = exportMarkdown(
+      [
       book({ title: 'Human Hacking', author: 'Christopher Hadnagy', status: 'uit', vaultPath: '30 Kennis/38 Objects/Books/Human Hacking EPB.md' }),
       book({ title: 'Borne', status: 'lezend', vaultPath: '30 Kennis/38 Objects/Books/Borne.md' })
-    ]);
+      ],
+      CATS,
+      H
+    );
     expect(md).toContain('- [[Human Hacking EPB|Human Hacking]] — Christopher Hadnagy');
     expect(md).toContain('- [[Borne]]');
   });
@@ -86,7 +103,8 @@ describe('leesdossier', () => {
   it('mapt metadata heen en terug; lege tekst wordt null', () => {
     expect(bookMetadata({ author: '', doneAt: '2026-01-02', vaultPath: 'a.md' })).toEqual({ author: null, done_at: '2026-01-02', vault_path: 'a.md' });
     const b = bookFromEntity({ id: '1', version: 2, metadata: { title: 'T', status: 'raar', cat: 'x', rating: 9, done_at: '2026-01-02' } });
-    expect(b).toMatchObject({ status: 'te-lezen', cat: 'ov', rating: 5, doneAt: '2026-01-02' });
+    expect(b).toMatchObject({ status: 'te-lezen', cat: 'x', rating: 5, doneAt: '2026-01-02' });
+    expect(bookFromEntity({ id: '2', version: 1, metadata: { cat: 'Geen Geldige Id!' } }).cat).toBe('ov');
     expect(bookContent({ title: 'T', author: 'A', note: '' })).toBe('T — A');
   });
 

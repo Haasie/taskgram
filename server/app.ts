@@ -13,6 +13,7 @@ import { createSender, type PushSender } from './push/sender.js';
 import { createPushStore, type PushStore } from './push/store.js';
 import { createModuleRoutes, createModuleRuntime, type ModuleRuntime } from './modules/routes.js';
 import { createModuleStore, type ModuleStore } from './modules/store.js';
+import { MODULES } from './modules/discover.js';
 
 export function createApp(
   config: Config,
@@ -55,7 +56,7 @@ export function createApp(
     opts?.moduleRuntime ??
     createModuleRuntime({
       pg,
-      store: opts?.moduleStore ?? createModuleStore(config.dataDir ?? './data'),
+      store: opts?.moduleStore ?? createModuleStore(config.dataDir ?? './data', MODULES),
       env: opts?.moduleEnv ?? {},
       timeZone: config.appTimezone
     });

@@ -7,6 +7,7 @@ import { createSender } from './push/sender.js';
 import { createPushStore } from './push/store.js';
 import { createModuleRuntime } from './modules/routes.js';
 import { createModuleStore } from './modules/store.js';
+import { MODULES } from './modules/discover.js';
 
 const config = loadConfig();
 const pg = createPostgramClient(config);
@@ -14,7 +15,7 @@ const store = createPushStore(config.dataDir ?? './data');
 const sender = config.push ? createSender(config.push) : null;
 const moduleRuntime = createModuleRuntime({
   pg,
-  store: createModuleStore(config.dataDir ?? './data'),
+  store: createModuleStore(config.dataDir ?? './data', MODULES),
   env: process.env,
   timeZone: config.appTimezone
 });

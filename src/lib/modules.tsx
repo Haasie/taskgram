@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
-import { MODULES, moduleById } from '../../modules/registry.js';
-import type { ModuleManifest, ModuleViewProps } from '../../modules/types.js';
-import { api } from './api';
+import { MODULES, moduleById } from './moduleRegistry';
+import type { ModuleManifest, ModuleSettings, ModuleStates, ModuleViewProps } from '../../modules/types.js';
+import { api, ApiError, type ModulesInfo } from './api';
 import { queryClient } from './queries';
 import { showToast } from './toast';
 import { getLang } from '../i18n/index.js';
@@ -23,8 +23,30 @@ export const CLIENT_MODULES: ClientModule[] = MODULES.flatMap((m) => {
 
 const MODULES_KEY = ['modules'] as const;
 
-export const useModuleStates = () =>
-  useQuery({ queryKey: MODULES_KEY, queryFn: api.modules, staleTime: 60_000 });
+const useModulesInfo = () => useQuery({ queryKey: MODULES_KEY, queryFn: api.modules, staleTime: 60_000 });
+
+/** Aan/uit per module; `data` is undefined zolang onbekend. */
+export function useModuleStates() {
+  const q = useModulesInfo();
+  return { ...q, data: q.data?.modules as ModuleStates | undefined };
+}
+
+/** Instellingen van één module (standaardwaarden al ingevuld door de server). */
+export function useModuleSettings(id: string): ModuleSettings | undefined {
+  return useModulesInfo().data?.settings?.[id];
+}
+
+/** Instellingen opslaan; gooit bij een validatiefout met de meldingen per veld. */
+export async function saveModuleSettings(id: string, values: ModuleSettings, reset: string[] = []) {
+  try {
+    const settings = await api.setModuleSettings(id, values, reset);
+    queryClient.setQueryData<ModulesInfo>(MODULES_KEY, (old) => (old ? { ...old, settings: { ...old.settings, [id]: settings } } : old));
+    return { ok: true as const };
+  } catch (err) {
+    const issues = err instanceof ApiError ? err.issues : undefined;
+    return { ok: false as const, message: err instanceof Error ? err.message : '', issues };
+  }
+}
 
 /** Ingeschakelde modules; zolang de status onbekend is: geen. */
 export function useEnabledModules(): ClientModule[] {
@@ -33,10 +55,11 @@ export function useEnabledModules(): ClientModule[] {
 }
 
 export async function setModuleEnabled(id: string, enabled: boolean) {
-  const previous = queryClient.getQueryData<Record<string, boolean>>(MODULES_KEY);
-  queryClient.setQueryData(MODULES_KEY, { ...previous, [id]: enabled });
+  const previous = queryClient.getQueryData<ModulesInfo>(MODULES_KEY);
+  if (previous) queryClient.setQueryData<ModulesInfo>(MODULES_KEY, { ...previous, modules: { ...previous.modules, [id]: enabled } });
   try {
-    queryClient.setQueryData(MODULES_KEY, await api.setModuleEnabled(id, enabled));
+    const modules = await api.setModuleEnabled(id, enabled);
+    queryClient.setQueryData<ModulesInfo>(MODULES_KEY, (old) => (old ? { ...old, modules } : { modules, settings: {} }));
     // Uit = ook geen achtergebleven moduledata in het geheugen.
     if (!enabled) queryClient.removeQueries({ queryKey: ['module', id] });
   } catch (err) {

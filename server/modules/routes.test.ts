@@ -7,6 +7,7 @@ import { createApp } from '../app.js';
 import type { Config } from '../config.js';
 import type { PostgramClient, RawEntity } from '../postgram.js';
 import { createModuleStore } from './store.js';
+import { MODULES } from './discover.js';
 
 const SECRET = 'x'.repeat(40);
 const config: Config = {
@@ -45,7 +46,7 @@ function setup(moduleEnv: Record<string, string> = {}) {
     ),
     deleteEntity: vi.fn(async () => ({}))
   };
-  const moduleStore = createModuleStore(mkdtempSync(join(tmpdir(), 'tg-modules-')));
+  const moduleStore = createModuleStore(mkdtempSync(join(tmpdir(), 'tg-modules-')), MODULES);
   const app = createApp(config, pg as unknown as PostgramClient, { moduleStore, moduleEnv });
   const call = (method: string, path: string, body?: unknown) =>
     app.request(`/api/modules${path}`, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
@@ -55,7 +56,7 @@ function setup(moduleEnv: Record<string, string> = {}) {
 describe('modules', () => {
   it('staan standaard uit en de API weigert dan zonder Postgram te raken', async () => {
     const { pg, call } = setup();
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: true, priveradar: true, beheer: false } });
+    expect((await (await call('GET', '')).json()).modules).toEqual({ leesdossier: false, werkradar: true, priveradar: true, beheer: false });
     const res = await call('GET', '/leesdossier/books');
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe('MODULE_DISABLED');
@@ -66,13 +67,13 @@ describe('modules', () => {
     const { call } = setup();
     expect((await call('GET', '/werkradar/anything')).status).toBe(404);
     await call('PUT', '/werkradar', { enabled: false });
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: false, werkradar: false, priveradar: true, beheer: false } });
+    expect((await (await call('GET', '')).json()).modules).toEqual({ leesdossier: false, werkradar: false, priveradar: true, beheer: false });
   });
 
   it('bewaart de schakelaar en weigert onbekende modules', async () => {
     const { call } = setup();
     expect(await (await call('PUT', '/leesdossier', { enabled: true })).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true, beheer: false } });
-    expect(await (await call('GET', '')).json()).toEqual({ modules: { leesdossier: true, werkradar: true, priveradar: true, beheer: false } });
+    expect((await (await call('GET', '')).json()).modules).toEqual({ leesdossier: true, werkradar: true, priveradar: true, beheer: false });
     expect((await call('PUT', '/bestaat-niet', { enabled: true })).status).toBe(404);
     expect((await call('PUT', '/leesdossier', { enabled: 'ja' })).status).toBe(400);
   });
@@ -210,5 +211,42 @@ describe('beheer: Supervisor-status', () => {
     expect((await res.json()).error.code).toBe('SUPERVISOR_AUTH');
     await call('PUT', '/beheer', { enabled: false });
     expect((await call('GET', '/beheer/status')).status).toBe(404);
+  });
+});
+
+describe('module-discovery en instellingen', () => {
+  it('vindt modules aan hun module.ts, gesorteerd op order', () => {
+    expect(MODULES.map((m) => m.id)).toEqual(['leesdossier', 'werkradar', 'priveradar', 'beheer']);
+  });
+
+  it('geeft instellingen met standaardwaarden en valideert wijzigingen per veld', async () => {
+    const { call } = setup();
+    const info = await (await call('GET', '')).json();
+    expect(info.settings.leesdossier).toMatchObject({ quarterGoal: 4, bookTag: 'book', exportPath: 'Leeslijst.md' });
+    expect(info.settings.werkradar).toEqual({ tag: 'werkradar', staleDays: 28 });
+
+    // Instellen mag ook als de module uit staat.
+    const ok = await call('PUT', '/leesdossier/settings', { values: { quarterGoal: 6, categories: [{ id: 'sf', label: 'SF' }, { id: 'ov', label: 'Overig' }] } });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).settings).toMatchObject({ quarterGoal: 6, categories: [{ id: 'sf', label: 'SF' }, { id: 'ov', label: 'Overig' }] });
+
+    const bad = await call('PUT', '/leesdossier/settings', { values: { quarterGoal: -1, categories: [{ id: 'Fout!', label: 'x' }], onbekend: 1 } });
+    expect(bad.status).toBe(400);
+    expect(Object.keys((await bad.json()).error.issues).sort()).toEqual(['categories', 'onbekend', 'quarterGoal']);
+
+    const reset = await call('PUT', '/leesdossier/settings', { reset: ['quarterGoal'] });
+    expect((await reset.json()).settings.quarterGoal).toBe(4);
+    expect((await call('PUT', '/bestaat-niet/settings', { values: {} })).status).toBe(404);
+  });
+
+  it('leesdossier gebruikt de ingestelde tag en weigert categorieën die niet zijn ingesteld', async () => {
+    const { pg, call } = setup();
+    await call('PUT', '/leesdossier', { enabled: true });
+    await call('PUT', '/leesdossier/settings', { values: { bookTag: 'boek', categories: [{ id: 'sf', label: 'SF' }] } });
+    await call('GET', '/leesdossier/books');
+    expect(pg.listEntities).toHaveBeenLastCalledWith('document', ['boek']);
+    expect((await call('POST', '/leesdossier/books', { title: 'X', cat: 'fic' })).status).toBe(400);
+    expect((await call('POST', '/leesdossier/books', { title: 'X', cat: 'sf' })).status).toBe(201);
+    expect(pg.createEntity).toHaveBeenLastCalledWith(expect.objectContaining({ tags: ['boek'] }));
   });
 });

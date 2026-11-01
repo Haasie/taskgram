@@ -1,23 +1,28 @@
 /** Leesdossier: één Postgram-entity per boek (type document, tag `book`), velden in metadata. */
 
+/** Standaard-tag; per installatie in te stellen (instelling bookTag). */
 export const BOOK_TAG = 'book';
 
 export const BOOK_STATUSES = ['te-lezen', 'lezend', 'uit', 'gestaakt'] as const;
 export type BookStatus = (typeof BOOK_STATUSES)[number];
 
-export const CATEGORIES = [
-  ['pol', 'Politiek & Geschiedenis'],
-  ['fil', 'Filosofie & Psychologie'],
-  ['lead', 'Leiderschap & Business'],
-  ['sec', 'Security & Techniek'],
-  ['fic', 'Fictie'],
-  ['reis', 'Reizen & Cultuur'],
-  ['koken', 'Koken & Lifestyle'],
-  ['ov', 'Overig']
-] as const;
-export type Category = (typeof CATEGORIES)[number][0];
-export const CATEGORY_IDS = CATEGORIES.map((c) => c[0]) as unknown as readonly [Category, ...Category[]];
-export const categoryName = (cat: string) => CATEGORIES.find((c) => c[0] === cat)?.[1] ?? 'Overig';
+/** Categorie-id: komt uit de instelling `categories` (a-z, 0-9, -). */
+export type Category = string;
+export const CATEGORY_ID = /^[a-z0-9-]{1,24}$/;
+
+/** Categorieën zoals ingesteld, met labels al in de huidige taal. */
+export type CategoryList = { id: string; label: string }[];
+
+/** Label van een categorie; onbekend → de laatste categorie (bijv. "Overig"). */
+export function categoryLabel(cats: CategoryList, id: string): string {
+  return (cats.find((c) => c.id === id) ?? cats[cats.length - 1])?.label ?? id;
+}
+
+/** Plek in de lijst; onbekend → laatste plek. */
+export function categoryIndex(cats: CategoryList, id: string): number {
+  const i = cats.findIndex((c) => c.id === id);
+  return i < 0 ? cats.length - 1 : i;
+}
 
 export type Book = {
   id: string;
@@ -79,7 +84,7 @@ const dateOrNull = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}
 export function bookFromEntity(raw: { id: string; version: number; metadata: Record<string, unknown> | null }): Book {
   const m = raw.metadata ?? {};
   const status = (BOOK_STATUSES as readonly string[]).includes(str(m.status)) ? (m.status as BookStatus) : 'te-lezen';
-  const cat = (CATEGORY_IDS as readonly string[]).includes(str(m.cat)) ? (m.cat as Category) : 'ov';
+  const cat = CATEGORY_ID.test(str(m.cat)) ? str(m.cat) : 'ov';
   return {
     id: raw.id,
     version: raw.version,

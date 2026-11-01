@@ -19,15 +19,13 @@ Taskgram only reads and writes tasks through the Postgram API.
   (blocked by, subtask of, depends on, duplicate of, related), duplicating tasks and Quick Add Magic:
   type `Call supplier +renovation *phone !4 tomorrow` to set project, label, priority and date at once
   (dates are only picked up at the end of the title, e.g. `… tomorrow` or `… due friday`).
-- **Radar per area** (modules *Werkradar* and *Privéradar*, on by default) — a project board for Work and Personal: every Postgram project tagged `werkradar`
-  or `priveradar` becomes a card with status (red/amber/green), phase, next step, external party,
+- **Radar per area** (modules *Werkradar* and *Privéradar*, on by default) — a project board for Work and Personal: every Postgram project with the radar tag (default `werkradar`
+  / `priveradar`) becomes a card with status (red/amber/green), phase, next step, external party,
   deadline and risk, plus a bar of its open tasks per status. Edit those fields inline; they are stored
   in the project's metadata, so other tools reading Postgram see the same picture.
-- **Optional modules** — extra dashboards you switch on or off in Settings (stored on the server, so
-  every device agrees). A disabled module has no route, no menu item and its API refuses requests.
-  The first module is **Leesdossier** (`#/lezen`): a reading list with what you are reading now, a
-  numbered queue, a backlog per category, finished books with ratings, a quarterly goal, and a Markdown
-  export for an Obsidian reading list. It has its own "Dossier" (light) and "Terminal" (dark) styling.
+- **Optional modules** — extra views you switch on, off and configure in Settings (stored on the server, so
+  every device agrees): the **Leesdossier** reading list and the **Radar** project boards. Add your own as a
+  folder under `modules/`; see [docs/modules](docs/modules/README.md).
 - **Recurring tasks** — daily, weekly on chosen days, monthly, or N days/weeks after completion.
   Completing one creates exactly one next occurrence; undo removes it again.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
@@ -115,31 +113,18 @@ with a mock Postgram.
 
 ## Modules
 
-A module is one entry in [`modules/registry.ts`](modules/registry.ts) plus one folder `modules/<id>/`:
+Optional views on top of the task lists, each switched on or off (and configured) under **Settings → Modules**.
+A disabled module has no route, no menu item, and its API refuses requests. On/off and settings are stored on the
+server; secrets only come from environment variables.
 
-- `client.tsx` — default export: the view (loaded lazily, only when the module is opened);
-- `server.ts` — optional, exports `routes(pg)`: its API under `/api/modules/<id>/…`, only reachable while
-  the module is enabled.
+| Module | What it does | Docs |
+| --- | --- | --- |
+| **Leesdossier** | Reading list in Postgram with queue, backlog, quarterly goal, Markdown export and optional KOReader sync | [docs/modules/leesdossier.md](docs/modules/leesdossier.md) |
+| **Werkradar / Privéradar** | Project board per area from tagged Postgram projects | [docs/modules/radar.md](docs/modules/radar.md) |
 
-A module server receives a context (Postgram client, environment, time zone, `isEnabled()`) and may export
-`start(ctx)` for background work, which must check `isEnabled()` before every data call.
-
-**KOReader sync (Leesdossier).** Set `KOSYNC_URL`, `KOSYNC_USER` and `KOSYNC_PASSWORD` to a KOReader sync server
-that offers `GET /syncs/documents` (e.g. koreader-sync). Every 15 minutes (`KOSYNC_SYNC_MINUTES`, 0 = only manual), and via “Sync KOReader”, reading progress
-flows one way into the Leesdossier: books are matched on title (then remembered by document hash), progress is
-updated, a queued book starts when progress appears, and at 99% it is marked finished. Finished or stopped books are
-never reset. Unknown documents are listed so you can add them.
-
-**Beheer.** Set `SUPERVISOR_URL` and `SUPERVISOR_TOKEN` to a Homelab Supervisor (haasiehomeops) and the module
-shows its `/api/status`: containers, storage/ZFS/SMART, backup age, the last restore drill, what Claude did and the
-audit log. Each state is shown with a word and a shape (● OK, ▲ LET OP, ■ ALARM), never colour alone; a supervisor
-that has not polled for 15 minutes counts as an alarm. The token stays on the server.
-
-Shared look for dashboard modules: `modules/_design` (Dossier light / Terminal dark), imported with `import '../_design'`.
-
-New modules are off by default (`defaultEnabled`). `scripts/seed-leesdossier.ts <file.json>` is an idempotent
-importer for Leesdossier books (it never overwrites existing books and links each book to a mirrored vault
-note with a `related_to` edge).
+A module is one folder `modules/<id>/` (manifest, view, optional server); there is no central list, so you can add
+your own — or keep private ones in a separate repository and build an overlay image.
+See **[docs/modules/README.md](docs/modules/README.md)**.
 
 ## License
 
