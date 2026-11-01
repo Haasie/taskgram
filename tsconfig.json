@@ -14,5 +14,5 @@
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
   "include": ["src", "shared", "modules"],
-  "exclude": ["src/sw.ts", "modules/*/server.ts"]
+  "exclude": ["src/sw.ts", "modules/*/server.ts", "modules/*/server.test.ts"]
 }

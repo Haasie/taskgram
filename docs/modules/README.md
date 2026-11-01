@@ -91,3 +91,7 @@ RUN npm ci && npm run build && npm prune --omit=dev
 ```
 
 Pin `TASKGRAM_REF` to a tag or commit so an upstream change cannot break your build unnoticed.
+
+Server-side tests for a private module can live next to it as `modules/<id>/server.test.ts`; the client
+typecheck skips that file, like `server.ts`. Run `npm run typecheck && npx vitest run` in the build stage, so an
+image only exists when the core tests and your module tests pass together.
