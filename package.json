@@ -25,7 +25,7 @@
     "workbox-core": "^7.4.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -43,17 +43,20 @@
     "@types/web-push": "^3.6.4",
     "@vite-pwa/assets-generator": "^1.0.4",
     "@vitejs/plugin-react": "^6.1.1",
-    "concurrently": "^10.0.5",
+    "concurrently": "^10.0.6",
     "lucide-react": "^1.49.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1",
+    "vite": "^8.3.4",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^5.0.3"
   },
   "license": "MIT",
-  "description": "A Things 3-style task app for Postgram"
+  "description": "A Things 3-style task app for Postgram",
+  "overrides": {
+    "source-map-js": "^1.2.2"
+  }
 }
