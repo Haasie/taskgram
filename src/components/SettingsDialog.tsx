@@ -7,7 +7,8 @@ import { currentSubscription, disablePush, enablePush, isIos, isStandalone, push
 import { showToast } from '../lib/toast.js';
 import { Modal } from './Modal.js';
 import { getLang, setLang, t, useLang } from '../i18n/index.js';
-import { CLIENT_MODULES, ModuleIcon, moduleDescription, moduleTitle, setModuleEnabled, useModuleStates } from '../lib/modules';
+import { CLIENT_MODULES, ModuleIcon, moduleDescription, moduleTitle, setModuleEnabled, useModuleSettings, useModuleStates } from '../lib/modules';
+import { ModuleSettingsForm } from './ModuleSettingsForm';
 
 export function SettingsDialog({
   open,
@@ -217,24 +218,7 @@ export function SettingsDialog({
             <legend className="px-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">{t('modules.settingsTitle')}</legend>
             <p className="text-xs text-zinc-500">{t('modules.settingsHint')}</p>
             {CLIENT_MODULES.map((m) => (
-              <label key={m.id} className="flex items-start justify-between gap-3 cursor-pointer">
-                <span className="flex items-start gap-2">
-                  <ModuleIcon module={m} className="mt-0.5 shrink-0 text-zinc-500" />
-                  <span>
-                    <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">{moduleTitle(m)}</span>
-                    <span className="block text-xs text-zinc-500">{moduleDescription(m)}</span>
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label={moduleTitle(m)}
-                  checked={moduleStates.data?.[m.id] ?? false}
-                  disabled={!moduleStates.data}
-                  onChange={(e) => void setModuleEnabled(m.id, e.target.checked)}
-                  className="mt-1 rounded border-zinc-300 text-sky-500 focus:ring-sky-500 size-4"
-                />
-              </label>
+              <ModuleRow key={m.id} module={m} enabled={moduleStates.data?.[m.id] ?? false} known={Boolean(moduleStates.data)} />
             ))}
           </fieldset>
 
@@ -308,5 +292,40 @@ export function SettingsDialog({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function ModuleRow({ module: m, enabled, known }: { module: (typeof CLIENT_MODULES)[number]; enabled: boolean; known: boolean }) {
+  const settings = useModuleSettings(m.id);
+  const configurable = Boolean(m.settings?.length || m.env?.length);
+  return (
+    <div className="space-y-1">
+      <label className="flex items-start justify-between gap-3 cursor-pointer">
+        <span className="flex items-start gap-2">
+          <ModuleIcon module={m} className="mt-0.5 shrink-0 text-zinc-500" />
+          <span>
+            <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">{moduleTitle(m)}</span>
+            <span className="block text-xs text-zinc-500">{moduleDescription(m)}</span>
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          aria-label={moduleTitle(m)}
+          checked={enabled}
+          disabled={!known}
+          onChange={(e) => void setModuleEnabled(m.id, e.target.checked)}
+          className="mt-1 rounded border-zinc-300 text-sky-500 focus:ring-sky-500 size-4"
+        />
+      </label>
+      {configurable && (
+        <details className="ml-6 text-sm">
+          <summary className="cursor-pointer text-xs text-sky-700 dark:text-sky-400">
+            {t('modules.settings')} — {moduleTitle(m)}
+          </summary>
+          <ModuleSettingsForm module={m} current={settings} />
+        </details>
+      )}
+    </div>
   );
 }

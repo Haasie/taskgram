@@ -5,7 +5,8 @@ import type { AuthEnv } from '../../server/auth.js';
 import type { ModuleContext } from '../../server/modules/routes.js';
 import { UpstreamError, type RawEntity } from '../../server/postgram.js';
 import { todayInZone } from '../../shared/dates.js';
-import { BOOK_STATUSES, BOOK_TAG, CATEGORY_IDS, bookContent, bookFromEntity, bookMetadata, type Book, type BookPatch } from './book.js';
+import { optionList } from '../settings.js';
+import { BOOK_STATUSES, BOOK_TAG, CATEGORY_ID, bookContent, bookFromEntity, bookMetadata, type Book, type BookPatch } from './book.js';
 import { authorsText, matchBook, syncPatch, type KosyncDocument } from './kosync.js';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -16,7 +17,7 @@ const fields = z
     title: text(300).min(1),
     author: text(300),
     status: z.enum(BOOK_STATUSES),
-    cat: z.enum(CATEGORY_IDS),
+    cat: z.string().regex(CATEGORY_ID),
     rating: z.number().int().min(0).max(5),
     progress: z.number().int().min(0).max(100),
     order: z.number().int().min(0).max(100_000),
@@ -33,7 +34,7 @@ const fields = z
 
 const createBody = fields.required({ title: true });
 const updateBody = fields.extend({ version: z.number().int().positive() }).strict();
-const adoptBody = z.object({ cat: z.enum(CATEGORY_IDS).default('ov') }).strict();
+const adoptBody = z.object({ cat: z.string().regex(CATEGORY_ID).optional() }).strict();
 
 
 type SyncResult = {
@@ -77,11 +78,19 @@ export function routes(ctx: ModuleContext) {
   const api = new Hono<AuthEnv>();
   const uuid = z.string().uuid();
   const kosync = kosyncConfig(ctx.env);
+  // Instellingen per verzoek lezen: een wijziging in Instellingen → Modules werkt meteen.
+  const bookTag = () => (typeof ctx.settings().bookTag === 'string' && ctx.settings().bookTag ? String(ctx.settings().bookTag) : BOOK_TAG);
+  const categoryIds = () => optionList(ctx.settings().categories).map((o) => o.id);
+  function checkCategory(cat: string | undefined) {
+    if (cat !== undefined && !categoryIds().includes(cat)) {
+      throw new UpstreamError(400, 'VALIDATION', `Unknown category "${cat}"`);
+    }
+  }
 
   /** Alleen entities die echt boeken zijn mogen via deze API veranderen. */
   async function requireBook(id: string): Promise<RawEntity> {
     const entity = await pg.getEntity(uuid.parse(id));
-    if (entity.type !== 'document' || !entity.tags.includes(BOOK_TAG)) {
+    if (entity.type !== 'document' || !entity.tags.includes(bookTag())) {
       throw new UpstreamError(404, 'NOT_FOUND', 'Book not found');
     }
     return entity;
@@ -91,7 +100,7 @@ export function routes(ctx: ModuleContext) {
     const { id, version, ...defaults } = bookFromEntity({ id: '', version: 0, metadata: {} });
     const book = { ...defaults, ...fields };
     return bookFromEntity(
-      await pg.createEntity({ type: 'document', content: bookContent(book), visibility: 'personal', tags: [BOOK_TAG], metadata: bookMetadata(book) })
+      await pg.createEntity({ type: 'document', content: bookContent(book), visibility: 'personal', tags: [bookTag()], metadata: bookMetadata(book) })
     );
   }
 
@@ -101,17 +110,19 @@ export function routes(ctx: ModuleContext) {
   }
 
   api.get('/books', async (c) => {
-    const items = await pg.listEntities('document', [BOOK_TAG]);
+    const items = await pg.listEntities('document', [bookTag()]);
     return c.json({ items: items.map(bookFromEntity) });
   });
 
   api.post('/books', async (c) => {
     const body: BookPatch = createBody.parse(await c.req.json());
+    checkCategory(body.cat);
     return c.json({ book: await createBook(body) }, 201);
   });
 
   api.patch('/books/:id', async (c) => {
     const { version, ...patch } = updateBody.parse(await c.req.json());
+    checkCategory(patch.cat);
     const current = bookFromEntity(await requireBook(c.req.param('id')));
     return c.json({ book: await applyPatch(current, patch, version) });
   });
@@ -131,7 +142,7 @@ export function routes(ctx: ModuleContext) {
     const at = new Date().toISOString();
     try {
       const docs = await fetchDocuments(kosync!);
-      const books = (await pg.listEntities('document', [BOOK_TAG])).map(bookFromEntity);
+      const books = (await pg.listEntities('document', [bookTag()])).map(bookFromEntity);
       const updated: string[] = [];
       const unmatched: KosyncDocument[] = [];
       for (const doc of docs) {
@@ -173,7 +184,9 @@ export function routes(ctx: ModuleContext) {
   /** Onbekend KOReader-document als nieuw boek toevoegen, meteen gekoppeld. */
   api.post('/kosync/adopt/:document', async (c) => {
     if (!kosync) return c.json({ error: { code: 'KOSYNC_NOT_CONFIGURED', message: 'KOReader sync is not configured' } }, 404);
-    const { cat } = adoptBody.parse(await c.req.json().catch(() => ({})));
+    const ids = categoryIds();
+    const { cat = ids[ids.length - 1] ?? 'ov' } = adoptBody.parse(await c.req.json().catch(() => ({})));
+    checkCategory(cat);
     const doc = (await fetchDocuments(kosync)).find((d) => d.document === c.req.param('document'));
     if (!doc) throw new UpstreamError(404, 'NOT_FOUND', 'Document not found in KOReader sync');
     const title = (doc.title?.trim() || doc.filename?.replace(/\.[a-z0-9]+$/i, '') || doc.document).slice(0, 300);

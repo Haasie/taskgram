@@ -44,15 +44,20 @@ type Props = {
   projects: Project[];
   today: string;
   onOpenProject: (id: string) => void;
+  /** Instelling van de module; standaard de tag van het gebied. */
+  tag?: string;
+  staleDays?: number;
 };
 
 /** Ingang voor de modules Werkradar en Privéradar: haalt taken en projecten zelf op. */
-export function RadarModule({ area, today }: { area: Visibility; today: string }) {
+export function RadarModule({ area, today, tag, staleDays }: { area: Visibility; today: string; tag?: string; staleDays?: number }) {
   const tasks = useTasks().data;
   const projects = useProjects().data;
   return (
     <RadarView
       area={area}
+      tag={tag}
+      staleDays={staleDays}
       tasks={tasks ?? []}
       projects={projects ?? []}
       today={today}
@@ -61,12 +66,12 @@ export function RadarModule({ area, today }: { area: Visibility; today: string }
   );
 }
 
-export function RadarView({ area, tasks, projects, today, onOpenProject }: Props) {
+export function RadarView({ area, tasks, projects, today, onOpenProject, tag: tagSetting, staleDays = 28 }: Props) {
   useLang();
-  const tag = RADAR_TAG[area] ?? '';
-  const ranked = useMemo(() => rankRadar(radarProjects(projects, area)), [projects, area]);
+  const tag = tagSetting || RADAR_TAG[area] || '';
+  const ranked = useMemo(() => rankRadar(radarProjects(projects, area, tag)), [projects, area, tag]);
   const counts = useMemo(() => countsByProject(tasks), [tasks]);
-  const summary = useMemo(() => radarSummary(tasks, projects, area, today), [tasks, projects, area, today]);
+  const summary = useMemo(() => radarSummary(tasks, projects, area, today, staleDays), [tasks, projects, area, today, staleDays]);
   const title = area === 'work' ? t('radar.title.work') : t('radar.title.personal');
 
   const kpis: { key: string; label: string; value: number; alert?: boolean }[] = [

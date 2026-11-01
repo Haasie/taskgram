@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Visibility } from '../../shared/types';
 import type { ListKind, View } from './lists';
-import { moduleById, moduleByRoute } from '../../modules/registry.js';
+import { moduleById, moduleByRoute } from './moduleRegistry';
 
 const LISTS: ListKind[] = ['inbox', 'today', 'upcoming', 'anytime', 'someday', 'waiting', 'logbook'];
 
