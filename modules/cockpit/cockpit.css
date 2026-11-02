@@ -1,0 +1,24 @@
+/* Cockpit: status altijd met een vorm en een woord (● Veilig, ▲ Let op, ■ Alarm), nooit alleen kleur. */
+.ld .cp-ok { --lvl: var(--c-fic); }
+.ld .cp-warn { --lvl: var(--accent); }
+.ld .cp-alert { --lvl: var(--sev-critical); }
+
+.ld .cp-tile { --t: var(--lvl); }
+.ld .cp-badge,
+.ld .cp-risk {
+  font: 600 10px/12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  padding: 2px 6px; border: 1.5px solid var(--lvl); color: var(--lvl); align-self: flex-start;
+}
+.ld .cp-alert.cp-badge,
+.ld .cp-alert.cp-risk { background: var(--lvl); color: var(--paper-raised); }
+.ld .cp-mark { font: 400 18px/18px var(--mono); color: var(--lvl); min-width: 28px; text-align: center; align-self: flex-start; }
+.ld .cp-item { align-items: start; }
+.ld .cp-ws { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; min-width: 0; }
+.ld .cp-risks { display: flex; flex-wrap: wrap; gap: 6px; }
+.ld .cp-resume { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.ld .cp-resume code {
+  flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; padding: 4px 8px;
+  background: var(--paper-sunken); border: 1px solid var(--rule);
+}
+.ld .cp-pr { margin-right: 8px; color: var(--gov); }
+.ld code { font-family: var(--mono); font-size: 13px; }

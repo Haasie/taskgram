@@ -121,6 +121,7 @@ server; secrets only come from environment variables.
 | --- | --- | --- |
 | **Leesdossier** | Reading list in Postgram with queue, backlog, quarterly goal, Markdown export and optional KOReader sync | [docs/modules/leesdossier.md](docs/modules/leesdossier.md) |
 | **Werkradar / Privéradar** | Project board per area from tagged Postgram projects | [docs/modules/radar.md](docs/modules/radar.md) |
+| **Cockpit** | Features per stage with their workspaces, unpushed/dirty/missing risks and resumable agent sessions (needs Postgram workspace tracking) | [docs/modules/cockpit.md](docs/modules/cockpit.md) |
 
 A module is one folder `modules/<id>/` (manifest, view, optional server); there is no central list, so you can add
 your own — or keep private ones in a separate repository and build an overlay image.

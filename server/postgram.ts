@@ -111,6 +111,8 @@ export function createPostgramClient(config: Config) {
         body: { source_id: sourceId, target_id: targetId, relation }
       }).then((r) => r.edge),
     deleteEdge: (id: string) => request<unknown>('DELETE', `/api/edges/${encodeURIComponent(id)}`),
+    /** Werkplekken en features per fase (`pgm where`); vraagt Postgram met workspace-tracking (spec 004). */
+    where: (query: Query) => request<unknown>('GET', '/api/where', { query }),
     search: (query: string) =>
       request<{ results: { entity: RawEntity; score: number }[] }>('POST', '/api/search', {
         body: { query, limit: 12 }

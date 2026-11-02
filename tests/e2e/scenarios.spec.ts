@@ -704,3 +704,26 @@ test('E26: module-instellingen in de UI en Leesdossier in het Engels', async ({ 
   expect(res.ok()).toBe(true);
   await setModule(page, false);
 });
+
+test('E27: Cockpit toont features per fase, risico’s in woorden en een hervat-commando', async ({ page }) => {
+  const toggle = (enabled: boolean) =>
+    page.request.put('/api/modules/cockpit', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } });
+  expect((await toggle(true)).ok()).toBe(true);
+  try {
+    await page.goto('/#/cockpit');
+    await expect(page.getByRole('heading', { name: 'Cockpit' })).toBeVisible();
+
+    const building = page.getByRole('region', { name: 'Bouwen' });
+    await expect(building).toContainText('Zoeken in notities');
+    await expect(building).toContainText('feat/search');
+    await expect(building).toContainText('Niet gecommit (3)');
+    await expect(building).toContainText('Niet gepusht (2)');
+    await expect(building).toContainText("claude --resume 'demo-session'");
+    await expect(building).not.toContainText('.jsonl');
+
+    await expect(page.getByRole('region', { name: 'Review' }).getByRole('link', { name: 'PR open' })).toHaveAttribute('href', 'https://github.com/example/notes/pull/7');
+    await expect(page.getByRole('region', { name: 'Zonder feature' })).toContainText('Ontbreekt');
+  } finally {
+    await toggle(false);
+  }
+});

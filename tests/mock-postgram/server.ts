@@ -288,6 +288,66 @@ app.post('/api/search', async (c) => {
 });
 
 const PORT = 4010;
+// Workspace-tracking (Postgram spec 004) voor de Cockpit-module; vaste, fictieve stand.
+app.get('/api/where', (c) => {
+  const view = c.req.query('view') ?? 'stage';
+  const now = new Date().toISOString();
+  const workspace = (id: string, branch: string, risks: string[], extra: Record<string, unknown> = {}) => ({
+    id,
+    machine: 'laptop',
+    connect_target: 'laptop',
+    path: `/home/dev/code/${id}`,
+    repo_remote: `github.com/example/${id}`,
+    branch,
+    feature_id: null,
+    last_activity_at: now,
+    git: { dirty_count: risks.includes('dirty') ? 3 : 0, unpushed_count: risks.includes('unpushed') ? 2 : 0, has_upstream: !risks.includes('no_upstream') },
+    git_state_at: now,
+    missing_since: risks.includes('missing') ? now : null,
+    risks,
+    resume_session: null,
+    sessions: [],
+    ...extra
+  });
+  const building = {
+    id: 'feat-demo',
+    title: 'Zoeken in notities',
+    stage: 'building',
+    stage_source: 'manual',
+    stage_set_at: now,
+    task_status: 'next',
+    pull_requests: [],
+    workspaces: [
+      workspace('notes', 'feat/search', ['dirty', 'unpushed'], {
+        resume_session: { id: 's1', agent_kind: 'claude-code', agent_session_id: 'demo-session', status: 'idle', cwd: '/home/dev/code/notes', transcript_path: '/home/dev/.claude/x.jsonl', last_activity_at: now },
+        sessions: [{ id: 's1', agent_kind: 'claude-code', agent_session_id: 'demo-session', status: 'idle', dormant: false, cwd: null, transcript_path: null, started_at: now, last_activity_at: now, ended_at: null, end_reason: null }]
+      })
+    ]
+  };
+  const review = {
+    id: 'feat-review',
+    title: 'Exportknop',
+    stage: 'review',
+    stage_source: 'derived',
+    stage_set_at: now,
+    task_status: 'next',
+    pull_requests: [{ url: 'https://github.com/example/notes/pull/7', state: 'open', updated_at: now }],
+    workspaces: [workspace('export', 'feat/export', [])]
+  };
+  const groups =
+    view === 'actions'
+      ? [
+          { key: 'review', label: 'Review', features: [review] },
+          { key: 'in_progress', label: 'In progress', features: [building] }
+        ]
+      : [
+          { key: 'building', label: 'Building', features: [building] },
+          { key: 'review', label: 'Review', features: [review] }
+        ];
+  groups.push({ key: 'unassigned', label: 'Unassigned', workspaces: [workspace('oud', 'main', ['missing'])] } as never);
+  return c.json({ view, generated_at: now, dormant_after_days: 30, groups });
+});
+
 serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`Mock Postgram running on http://localhost:${PORT}`);
 });
