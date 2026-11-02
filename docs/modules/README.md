@@ -7,6 +7,7 @@ item, optionally its own server API, that you switch on or off under **Settings 
 | --- | --- | --- | --- |
 | Leesdossier (reading file) | `#/lezen` | off | [leesdossier.md](leesdossier.md) |
 | Werkradar / Privéradar | `#/radar/work`, `#/radar/personal` | on | [radar.md](radar.md) |
+| Cockpit | `#/cockpit` | off | [cockpit.md](cockpit.md) |
 
 ## How a module behaves
 
