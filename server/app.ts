@@ -47,6 +47,16 @@ export function createApp(
 
   app.get('/healthz', (c) => c.text('ok'));
 
+  // Alleen fouten loggen: 5xx-antwoorden met duur en, bij een upstream-fout, de oorzaak. Geen querystring
+  // (kan zoektermen bevatten). Onverwachte fouten logt onError hieronder al met stacktrace.
+  app.use('/api/*', async (c, next) => {
+    const start = Date.now();
+    await next();
+    if (c.res.status < 500 || (c.error && !(c.error instanceof UpstreamError))) return;
+    const cause = c.error instanceof UpstreamError ? ` ${c.error.code}: ${c.error.message}` : '';
+    console.error(`[api] ${c.req.method} ${c.req.path} ${c.res.status} ${Date.now() - start}ms${cause}`);
+  });
+
   app.use('/api/*', async (c, next) => {
     c.header('cache-control', 'no-store');
     await next();
