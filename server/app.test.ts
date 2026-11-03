@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import webpush from 'web-push';
 import { createApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
-import type { PostgramClient } from './postgram.js';
+import { UpstreamError, type PostgramClient } from './postgram.js';
 
 const SECRET = 'x'.repeat(40);
 const config: Config = {
@@ -392,6 +392,35 @@ describe('radar metadata op projecten', () => {
         body: JSON.stringify({ version: 1, metadata })
       });
       expect(res.status).toBe(400);
+    }
+  });
+});
+
+describe('foutlogging', () => {
+  it('logt een upstream-fout met oorzaak, zonder querystring, en laat 2xx/4xx stil', async () => {
+    const failing = {
+      ...pg,
+      listTasks: vi.fn(async () => {
+        throw new UpstreamError(502, 'UPSTREAM_UNAVAILABLE', 'Postgram is unavailable');
+      })
+    } as unknown as PostgramClient;
+    const failingApp = createApp(config, failing);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const apiLines = () => errors.mock.calls.map((call) => String(call[0])).filter((l) => l.startsWith('[api]'));
+    try {
+      const res = await failingApp.request('/api/tasks?q=geheim', { headers: authed });
+      expect(res.status).toBe(502);
+      expect(apiLines()).toHaveLength(1);
+      const line = apiLines()[0];
+      expect(line).toMatch(/^\[api\] GET \/api\/tasks 502 \d+ms UPSTREAM_UNAVAILABLE: Postgram is unavailable$/);
+      expect(line).not.toContain('geheim');
+
+      errors.mockClear();
+      await app.request('/api/me', { headers: authed });
+      await app.request('/api/tasks', { headers: { 'x-cosmos-user': 'alice' } });
+      expect(apiLines()).toEqual([]);
+    } finally {
+      errors.mockRestore();
     }
   });
 });
