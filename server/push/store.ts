@@ -17,11 +17,16 @@ const subscriptionSchema = z.object({
 const settingsSchema = z.object({
   digestEnabled: z.boolean(),
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  // Nieuwe velden met een default: een bestaand push.json zonder deze velden blijft geldig
+  // (anders valt load() terug op defaultState() en zijn alle abonnementen weg).
+  eveningEnabled: z.boolean().default(false),
+  eveningTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default('21:00'),
   language: z.enum(['nl', 'en']).default('nl')
 });
 
 const sentSchema = z.object({
   digest: z.string().nullable(),
+  evening: z.string().nullable().default(null),
   reminders: z.record(z.string(), z.string())
 });
 
@@ -41,8 +46,8 @@ export type PushStore = ReturnType<typeof createPushStore>;
 function defaultState(): PushState {
   return {
     subscriptions: [],
-    settings: { digestEnabled: true, digestTime: '07:30', language: 'nl' },
-    sent: { digest: null, reminders: {} }
+    settings: { digestEnabled: true, digestTime: '07:30', eveningEnabled: false, eveningTime: '21:00', language: 'nl' },
+    sent: { digest: null, evening: null, reminders: {} }
   };
 }
 
@@ -143,6 +148,10 @@ export function createPushStore(dir: string) {
 
     setDigestSent(today: string): void {
       state.sent.digest = today;
+    },
+
+    setEveningSent(today: string): void {
+      state.sent.evening = today;
     },
 
     recordReminderSent(key: string, sentAtIso: string): void {

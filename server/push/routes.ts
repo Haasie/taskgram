@@ -29,6 +29,8 @@ const settingsBody = z
   .object({
     digestEnabled: z.boolean().optional(),
     digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    eveningEnabled: z.boolean().optional(),
+    eveningTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
     language: z.enum(['nl', 'en']).optional()
   })
   .strict();

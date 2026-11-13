@@ -15,6 +15,7 @@ describe('server/push/scheduler', () => {
   let sender: PushSender;
   let rawTasks: RawEntity[];
   let shouldFailPg: boolean;
+  let failDoneOnce = false;
   let pg: PostgramClient;
 
   beforeEach(() => {
@@ -39,9 +40,14 @@ describe('server/push/scheduler', () => {
 
     rawTasks = [];
     shouldFailPg = false;
+    failDoneOnce = false;
     pg = {
       listTasks: vi.fn(async (status: string) => {
         if (shouldFailPg) throw new Error('Postgram down');
+        if (status === 'done' && failDoneOnce) {
+          failDoneOnce = false;
+          throw new Error('done-lijst niet beschikbaar');
+        }
         return rawTasks.filter((t) => t.status === status);
       }),
       getEntity: vi.fn(),
@@ -95,7 +101,7 @@ describe('server/push/scheduler', () => {
     expect(digestCalls).toHaveLength(1);
     expect(digestCalls[0]?.payload).toEqual({
       title: 'Vandaag',
-      body: '2 taken vandaag · 1 te laat',
+      body: '2 taken vandaag · 1 te laat\n• Task 2\n• Task 1',
       url: '/#/today',
       tag: 'digest'
     });
@@ -242,7 +248,7 @@ describe('server/push/scheduler', () => {
     expect(digestCalls).toHaveLength(1);
     expect(digestCalls[0]?.payload).toEqual({
       title: 'Today',
-      body: '3 tasks today · 1 overdue',
+      body: '3 tasks today · 1 overdue\n• Task 2\n• Task 1\n• Buy milk',
       url: '/#/today',
       tag: 'digest'
     });
@@ -254,6 +260,92 @@ describe('server/push/scheduler', () => {
       body: 'Reminder',
       url: '/#/today',
       tag: 'reminder-task-en-rem'
+    });
+  });
+
+  describe('avondpush', () => {
+    const at = (iso: string) => {
+      let current = new Date(iso);
+      const scheduler = createScheduler({ pg, store, sender, timeZone: 'Europe/Amsterdam', now: () => current });
+      return { scheduler, set: (next: string) => { current = new Date(next); } };
+    };
+    const evening = () => sentCalls.filter((c) => c.payload.tag === 'evening');
+
+    it('staat standaard uit', async () => {
+      rawTasks = [makeTask('1', 'next', { start_date: '2026-10-01' })];
+      const { scheduler } = at('2026-09-30T19:00:00Z'); // woensdag 21:00
+      await scheduler.tick();
+      expect(evening()).toHaveLength(0);
+    });
+
+    it('21:00: afgerond vandaag (tijdzone) + morgen met top 3, één keer per dag', async () => {
+      store.updateSettings({ eveningEnabled: true, digestEnabled: false });
+      rawTasks = [
+        // Afgerond om 00:30 Amsterdam = 22:30Z de dag ervoor: telt voor vandaag.
+        makeTask('d1', 'done', { completed_at: '2026-09-29T22:30:00Z' }),
+        makeTask('d2', 'done', { completed_at: '2026-09-30T18:00:00Z' }),
+        // 23:30Z = 01:30 de volgende dag in Amsterdam: telt niet voor 30-09.
+        makeTask('d3', 'done', { completed_at: '2026-09-30T23:30:00Z' }),
+        makeTask('d4', 'done', { completed_at: '2026-09-29T12:00:00Z' }),
+        makeTask('m1', 'next', { start_date: '2026-10-01' }, 'Morgen A'),
+        makeTask('m2', 'next', { start_date: '2026-10-01', priority: 5 }, 'Morgen B'),
+        makeTask('m3', 'next', { due_date: '2026-09-29' }, 'Te laat'),
+        makeTask('m4', 'next', { start_date: '2026-10-01' }, 'Morgen C'),
+        makeTask('later', 'next', { start_date: '2026-10-09' }, 'Later')
+      ];
+      const { scheduler, set } = at('2026-09-30T18:59:00Z'); // 20:59
+      await scheduler.tick();
+      expect(evening()).toHaveLength(0);
+
+      set('2026-09-30T19:00:00Z'); // 21:00
+      await scheduler.tick();
+      expect(evening()).toHaveLength(1);
+      expect(evening()[0]?.payload).toEqual({
+        title: 'Morgen',
+        body: 'Vandaag 2 afgerond · morgen 4 taken\n• Te laat\n• Morgen B\n• Morgen A',
+        url: '/#/upcoming',
+        tag: 'evening'
+      });
+      expect(store.getState().sent.evening).toBe('2026-09-30');
+
+      set('2026-09-30T20:00:00Z');
+      await scheduler.tick();
+      expect(evening()).toHaveLength(1);
+    });
+
+    it('zondag: komende week in plaats van morgen', async () => {
+      store.updateSettings({ eveningEnabled: true, digestEnabled: false });
+      rawTasks = [
+        makeTask('w1', 'next', { start_date: '2026-10-07' }, 'Woensdag'),
+        makeTask('w2', 'next', { start_date: '2026-10-20' }, 'Veel later')
+      ];
+      const { scheduler } = at('2026-10-04T19:00:00Z'); // zondag 21:00
+      await scheduler.tick();
+      expect(evening()[0]?.payload).toMatchObject({
+        title: 'Komende week',
+        body: 'Komende week 1 taak\n• Woensdag'
+      });
+    });
+
+    it('niets afgerond en niets gepland: geen push, wel als verstuurd gemarkeerd', async () => {
+      store.updateSettings({ eveningEnabled: true, digestEnabled: false });
+      rawTasks = [makeTask('x', 'next', { start_date: '2026-10-20' })];
+      const { scheduler } = at('2026-09-30T19:00:00Z');
+      await scheduler.tick();
+      expect(evening()).toHaveLength(0);
+      expect(store.getState().sent.evening).toBe('2026-09-30');
+    });
+
+    it('tellen van afgeronde taken mislukt: niets sturen, volgende tick opnieuw', async () => {
+      store.updateSettings({ eveningEnabled: true, digestEnabled: false });
+      rawTasks = [makeTask('m1', 'next', { start_date: '2026-10-01' }, 'Morgen A')];
+      failDoneOnce = true;
+      const { scheduler } = at('2026-09-30T19:00:00Z');
+      await scheduler.tick();
+      expect(evening()).toHaveLength(0);
+      expect(store.getState().sent.evening).toBeNull();
+      await scheduler.tick();
+      expect(evening()).toHaveLength(1);
     });
   });
 });

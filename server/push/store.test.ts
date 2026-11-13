@@ -19,8 +19,8 @@ describe('server/push/store', () => {
     const store = createPushStore(tempDir);
     expect(store.getState()).toEqual({
       subscriptions: [],
-      settings: { digestEnabled: true, digestTime: '07:30', language: 'nl' },
-      sent: { digest: null, reminders: {} }
+      settings: { digestEnabled: true, digestTime: '07:30', eveningEnabled: false, eveningTime: '21:00', language: 'nl' },
+      sent: { digest: null, evening: null, reminders: {} }
     });
   });
 
@@ -29,8 +29,8 @@ describe('server/push/store', () => {
     const store = createPushStore(tempDir);
     expect(store.getState()).toEqual({
       subscriptions: [],
-      settings: { digestEnabled: true, digestTime: '07:30', language: 'nl' },
-      sent: { digest: null, reminders: {} }
+      settings: { digestEnabled: true, digestTime: '07:30', eveningEnabled: false, eveningTime: '21:00', language: 'nl' },
+      sent: { digest: null, evening: null, reminders: {} }
     });
   });
 
@@ -80,5 +80,22 @@ describe('server/push/store', () => {
     const parsed = JSON.parse(raw);
     expect(parsed.subscriptions).toHaveLength(1);
     expect(parsed.subscriptions[0].endpoint).toBe('https://fcm.googleapis.com/fcm/send/sub1');
+  });
+
+  it('oud push.json zonder avondvelden blijft geldig (abonnementen blijven bewaard)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pt-store-old-'));
+    try {
+      writeFileSync(join(dir, 'push.json'), JSON.stringify({
+        subscriptions: [{ id: 'a', endpoint: 'https://fcm.googleapis.com/x', keys: { p256dh: 'p', auth: 'a' }, label: null, createdAt: '2026-01-01T00:00:00Z' }],
+        settings: { digestEnabled: true, digestTime: '07:30', language: 'nl' },
+        sent: { digest: '2026-09-30', reminders: {} }
+      }));
+      const s = createPushStore(dir).getState();
+      expect(s.subscriptions).toHaveLength(1);
+      expect(s.settings).toMatchObject({ eveningEnabled: false, eveningTime: '21:00' });
+      expect(s.sent).toMatchObject({ digest: '2026-09-30', evening: null });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
