@@ -15,6 +15,7 @@ describe('server/push/scheduler', () => {
   let sender: PushSender;
   let rawTasks: RawEntity[];
   let shouldFailPg: boolean;
+  let failDoneOnce = false;
   let pg: PostgramClient;
 
   beforeEach(() => {
@@ -39,15 +40,15 @@ describe('server/push/scheduler', () => {
 
     rawTasks = [];
     shouldFailPg = false;
+    failDoneOnce = false;
     pg = {
       listTasks: vi.fn(async (status: string) => {
         if (shouldFailPg) throw new Error('Postgram down');
+        if (status === 'done' && failDoneOnce) {
+          failDoneOnce = false;
+          throw new Error('done-lijst niet beschikbaar');
+        }
         return rawTasks.filter((t) => t.status === status);
-      }),
-      listTasksPage: vi.fn(async (status: string, limit: number, offset: number) => {
-        if (shouldFailPg) throw new Error('Postgram down');
-        const all = rawTasks.filter((t) => t.status === status);
-        return { items: all.slice(offset, offset + limit), total: all.length };
       }),
       getEntity: vi.fn(),
       deleteEntity: vi.fn()
@@ -338,7 +339,7 @@ describe('server/push/scheduler', () => {
     it('tellen van afgeronde taken mislukt: niets sturen, volgende tick opnieuw', async () => {
       store.updateSettings({ eveningEnabled: true, digestEnabled: false });
       rawTasks = [makeTask('m1', 'next', { start_date: '2026-10-01' }, 'Morgen A')];
-      (pg.listTasksPage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('down'));
+      failDoneOnce = true;
       const { scheduler } = at('2026-09-30T19:00:00Z');
       await scheduler.tick();
       expect(evening()).toHaveLength(0);

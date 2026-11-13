@@ -15,23 +15,14 @@ export type SchedulerDeps = {
   now?: () => Date;
 };
 
-const DONE_PAGE = 100;
-const DONE_MAX_PAGES = 3;
-
 /**
- * Aantal taken dat vandaag (lokale datum) is afgerond. Begrensd op een paar pagina's:
- * de volgorde van Postgram is niet gegarandeerd, dus we stoppen niet op de eerste oude taak.
+ * Aantal taken dat vandaag (lokale datum) is afgerond. Postgram sorteert op aanmaakdatum, niet op
+ * afronddatum: een oude taak die vandaag af is kan overal in de lijst staan. Daarom de hele lijst
+ * afgeronde taken, één keer per avond (listTasks pagineert zelf en stopt bij 5000).
  */
 async function countDoneToday(pg: PostgramClient, today: string, timeZone: string): Promise<number> {
-  let count = 0;
-  for (let page = 0; page < DONE_MAX_PAGES; page++) {
-    const res = await pg.listTasksPage('done', DONE_PAGE, page * DONE_PAGE);
-    for (const raw of res.items) {
-      if (completionDayInZone(toTask(raw), timeZone) === today) count++;
-    }
-    if (res.items.length < DONE_PAGE || (page + 1) * DONE_PAGE >= res.total) break;
-  }
-  return count;
+  const done = await pg.listTasks('done');
+  return done.filter((raw) => completionDayInZone(toTask(raw), timeZone) === today).length;
 }
 
 export function createScheduler(deps: SchedulerDeps) {
