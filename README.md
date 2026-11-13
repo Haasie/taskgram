@@ -30,8 +30,9 @@ Taskgram only reads and writes tasks through the Postgram API.
   Completing one creates exactly one next occurrence; undo removes it again.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
   and synced automatically; real conflicts are shown instead of silently overwritten.
-- **Push notifications** — a daily digest at a time you choose and per-task reminders (Web Push; on iOS
-  after adding the app to the home screen).
+- **Push notifications** — a morning digest with today's top three tasks, an optional evening digest
+  (what you finished today and what is lined up tomorrow, the week ahead on Sundays), and per-task
+  reminders (Web Push; on iOS after adding the app to the home screen).
 - **Login your way** — built-in password login, a trusted reverse proxy (Authelia, Authentik,
   oauth2-proxy, Cosmos Cloud, …) or OpenID Connect.
 - **Dutch and English** interface.

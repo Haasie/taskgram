@@ -247,6 +247,8 @@ export const en: Record<keyof typeof nl, string> = {
   'settings.digest': 'Daily digest',
   'settings.digestTime': 'Digest time',
   'settings.digestTimeLabel': 'Time',
+  'settings.eveningDigest': 'Evening digest',
+  'settings.eveningDigestHint': 'What you finished today and what is lined up for tomorrow; on Sundays the week ahead.',
   'settings.sendTest': 'Send test notification',
   'settings.testNotification': 'Send test notification',
   'settings.testSent': 'Test notification sent!',

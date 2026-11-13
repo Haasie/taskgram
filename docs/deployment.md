@@ -158,6 +158,12 @@ or every redeploy loses them. On iOS, notifications only work once the app has b
 to the home screen (iOS 16.4 or later). Digest and reminder texts follow the language chosen
 in the app's settings.
 
+The morning digest lists the number of tasks for today plus the top three by title (overdue first,
+then priority). The evening digest is off by default; switch it on in the app's settings. It shows
+how many tasks were completed today and the top three for tomorrow (on Sundays: the coming week).
+Task titles appear on the lock screen, so leave the evening digest off on a shared device and keep
+sensitive details out of task titles. Neither digest is sent when there is nothing to report.
+
 ## Updating
 
 ```bash

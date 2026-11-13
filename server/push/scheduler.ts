@@ -1,5 +1,5 @@
 import { todayInZone, timeInZone } from '../../shared/dates.js';
-import { digestCounts } from '../../shared/digest.js';
+import { completionDayInZone, eveningDigest, morningDigest } from '../../shared/digest.js';
 import { deadline, startDate } from '../../shared/taskFields.js';
 import type { Task } from '../../shared/types.js';
 import { toTask } from '../mappers.js';
@@ -14,6 +14,25 @@ export type SchedulerDeps = {
   timeZone: string;
   now?: () => Date;
 };
+
+const DONE_PAGE = 100;
+const DONE_MAX_PAGES = 3;
+
+/**
+ * Aantal taken dat vandaag (lokale datum) is afgerond. Begrensd op een paar pagina's:
+ * de volgorde van Postgram is niet gegarandeerd, dus we stoppen niet op de eerste oude taak.
+ */
+async function countDoneToday(pg: PostgramClient, today: string, timeZone: string): Promise<number> {
+  let count = 0;
+  for (let page = 0; page < DONE_MAX_PAGES; page++) {
+    const res = await pg.listTasksPage('done', DONE_PAGE, page * DONE_PAGE);
+    for (const raw of res.items) {
+      if (completionDayInZone(toTask(raw), timeZone) === today) count++;
+    }
+    if (res.items.length < DONE_PAGE || (page + 1) * DONE_PAGE >= res.total) break;
+  }
+  return count;
+}
 
 export function createScheduler(deps: SchedulerDeps) {
   return {
@@ -49,27 +68,37 @@ export function createScheduler(deps: SchedulerDeps) {
         const lang = state.settings.language ?? 'nl';
         const isEn = lang === 'en';
 
-        // 3. Digest
-        if (state.settings.digestEnabled && time >= state.settings.digestTime && state.sent.digest !== today) {
-          const counts = digestCounts(tasks, today);
-          if (counts.today + counts.overdue > 0) {
-            const body = isEn
-              ? `${counts.today} ${counts.today === 1 ? 'task' : 'tasks'} today · ${counts.overdue} overdue`
-              : `${counts.today} taken vandaag · ${counts.overdue} te laat`;
-            const payload = {
-              title: isEn ? 'Today' : 'Vandaag',
-              body,
-              url: '/#/today',
-              tag: 'digest'
-            };
-            for (const sub of state.subscriptions) {
-              const res = await deps.sender.send(sub, payload);
-              if (res === 'gone') {
-                goneEndpoints.add(sub.endpoint);
-              }
+        const sendAll = async (payload: { title: string; body: string; url: string; tag: string }) => {
+          for (const sub of state.subscriptions) {
+            if (goneEndpoints.has(sub.endpoint)) continue;
+            const res = await deps.sender.send(sub, payload);
+            if (res === 'gone') {
+              goneEndpoints.add(sub.endpoint);
             }
           }
+        };
+
+        // 3. Digest (ochtend)
+        if (state.settings.digestEnabled && time >= state.settings.digestTime && state.sent.digest !== today) {
+          const payload = morningDigest(tasks, today, lang);
+          if (payload) await sendAll(payload);
           deps.store.setDigestSent(today);
+        }
+
+        // 3b. Avond: afgerond vandaag + morgen (zondag: komende week)
+        if (state.settings.eveningEnabled && time >= state.settings.eveningTime && state.sent.evening !== today) {
+          let doneToday: number | null = null;
+          try {
+            doneToday = await countDoneToday(deps.pg, today, deps.timeZone);
+          } catch (err) {
+            console.error('[scheduler] Failed to list done tasks:', err);
+          }
+          // Lukt het tellen niet, dan volgende tick opnieuw proberen in plaats van een verkeerd getal te sturen.
+          if (doneToday !== null) {
+            const payload = eveningDigest(tasks, doneToday, today, lang);
+            if (payload) await sendAll(payload);
+            deps.store.setEveningSent(today);
+          }
         }
 
         // 4. Reminders

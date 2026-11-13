@@ -85,12 +85,12 @@ export const api = {
     request<{ project: Project }>('POST', '/projects', { content, visibility }).then((r) => r.project),
   updateProject: (id: string, version: number, patch: ProjectPatch) =>
     request<{ project: Project }>('PATCH', `/projects/${id}`, { version, ...patch }).then((r) => r.project),
-  pushConfig: () => request<{ enabled: boolean; publicKey: string | null; settings: { digestEnabled: boolean; digestTime: string } }>('GET', '/push/config'),
+  pushConfig: () => request<{ enabled: boolean; publicKey: string | null; settings: { digestEnabled: boolean; digestTime: string; eveningEnabled?: boolean; eveningTime?: string } }>('GET', '/push/config'),
   subscribePush: (sub: { endpoint: string; keys: { p256dh: string; auth: string }; label?: string | null }) =>
     request<{ id: string }>('POST', '/push/subscriptions', sub),
   unsubscribePush: (endpoint: string) => request<{ ok: true }>('DELETE', '/push/subscriptions', { endpoint }),
-  savePushSettings: (settings: { digestEnabled?: boolean; digestTime?: string; language?: 'nl' | 'en' }) =>
-    request<{ settings: { digestEnabled: boolean; digestTime: string; language?: 'nl' | 'en' } }>('PUT', '/push/settings', settings),
+  savePushSettings: (settings: { digestEnabled?: boolean; digestTime?: string; eveningEnabled?: boolean; eveningTime?: string; language?: 'nl' | 'en' }) =>
+    request<{ settings: { digestEnabled: boolean; digestTime: string; eveningEnabled?: boolean; eveningTime?: string; language?: 'nl' | 'en' } }>('PUT', '/push/settings', settings),
   testPush: (endpoint: string) => request<{ ok: true }>('POST', '/push/test', { endpoint }),
   modules: () => request<ModulesInfo>('GET', '/modules'),
   setModuleEnabled: (id: string, enabled: boolean) =>

@@ -245,6 +245,8 @@ export const nl = {
   'settings.digest': 'Dagoverzicht',
   'settings.digestTime': 'Tijd dagoverzicht',
   'settings.digestTimeLabel': 'Tijdstip',
+  'settings.eveningDigest': 'Avondoverzicht',
+  'settings.eveningDigestHint': 'Wat je vandaag afrondde en wat morgen klaarstaat; op zondag de week vooruit.',
   'settings.sendTest': 'Stuur testmelding',
   'settings.testNotification': 'Stuur testmelding',
   'settings.testSent': 'Testmelding verstuurd!',

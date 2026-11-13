@@ -28,6 +28,8 @@ export function SettingsDialog({
   const [subEndpoint, setSubEndpoint] = useState<string | null>(null);
   const [digestEnabled, setDigestEnabled] = useState(true);
   const [digestTime, setDigestTime] = useState('07:30');
+  const [eveningEnabled, setEveningEnabled] = useState(false);
+  const [eveningTime, setEveningTime] = useState('21:00');
   const [testing, setTesting] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -46,6 +48,8 @@ export function SettingsDialog({
         if (config.settings) {
           setDigestEnabled(config.settings.digestEnabled);
           setDigestTime(config.settings.digestTime);
+          setEveningEnabled(config.settings.eveningEnabled ?? false);
+          setEveningTime(config.settings.eveningTime ?? '21:00');
         }
         if (config.enabled && pushSupported()) {
           const sub = await currentSubscription();
@@ -118,6 +122,27 @@ export function SettingsDialog({
       await api.savePushSettings({ digestEnabled, digestTime: time, language: getLang() });
     } catch (err) {
       console.error('[settings] Failed to save digest time:', err);
+      showToast(t('toast.saveError'));
+    }
+  };
+
+  const onToggleEvening = async (enabled: boolean) => {
+    setEveningEnabled(enabled);
+    try {
+      await api.savePushSettings({ eveningEnabled: enabled, language: getLang() });
+    } catch (err) {
+      console.error('[settings] Failed to save evening setting:', err);
+      showToast(t('toast.saveError'));
+    }
+  };
+
+  const onChangeEveningTime = async (time: string) => {
+    setEveningTime(time);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
+    try {
+      await api.savePushSettings({ eveningTime: time, language: getLang() });
+    } catch (err) {
+      console.error('[settings] Failed to save evening time:', err);
       showToast(t('toast.saveError'));
     }
   };
@@ -273,6 +298,31 @@ export function SettingsDialog({
                     type="time"
                     value={digestTime}
                     onChange={(e) => void onChangeDigestTime(e.target.value)}
+                    className="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 space-y-3">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                    {t('settings.eveningDigest')}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={eveningEnabled}
+                    onChange={(e) => void onToggleEvening(e.target.checked)}
+                    className="rounded border-zinc-300 text-sky-500 focus:ring-sky-500 size-4"
+                  />
+                </label>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('settings.eveningDigestHint')}</p>
+
+                <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/60">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">{t('settings.digestTimeLabel')}</span>
+                  <input
+                    type="time"
+                    value={eveningTime}
+                    onChange={(e) => void onChangeEveningTime(e.target.value)}
                     className="rounded border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
                   />
                 </div>

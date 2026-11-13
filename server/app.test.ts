@@ -251,7 +251,7 @@ describe('push routes', () => {
       expect(body).toEqual({
         enabled: false,
         publicKey: null,
-        settings: { digestEnabled: true, digestTime: '07:30', language: 'nl' }
+        settings: { digestEnabled: true, digestTime: '07:30', eveningEnabled: false, eveningTime: '21:00', language: 'nl' }
       });
 
       const postRes = await disabledApp.request('/api/push/subscriptions', {
