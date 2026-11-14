@@ -1,4 +1,4 @@
-import { parseISODate } from '../../shared/dates.js';
+import { parseISODate, timeInZone, todayInZone } from '../../shared/dates.js';
 import { checklist, deadline, isOpen, isToday, priority, sortOrder } from '../../shared/taskFields.js';
 import type { Task } from '../../shared/types.js';
 
@@ -48,6 +48,9 @@ export type Settings = {
   maxParallelAgents: number;
   agentTag: string;
   startFactor: number;
+  /** Werktijd (HH:MM) op werkdagen: afspraken binnen dit venster gaan van Werk af, de rest van Privé. */
+  workStart: string;
+  workEnd: string;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -58,7 +61,9 @@ export const DEFAULT_SETTINGS: Settings = {
   agentAttentionMinutes: 20,
   maxParallelAgents: 3,
   agentTag: 'agent',
-  startFactor: 1.5
+  startFactor: 1.5,
+  workStart: '08:30',
+  workEnd: '17:00'
 };
 
 export function readSettings(raw: Record<string, unknown>): Settings {
@@ -66,6 +71,8 @@ export function readSettings(raw: Record<string, unknown>): Settings {
     const v = raw[k];
     return typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : (DEFAULT_SETTINGS[k] as number);
   };
+  const hhmm = (k: 'workStart' | 'workEnd') =>
+    typeof raw[k] === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw[k] as string) ? (raw[k] as string) : DEFAULT_SETTINGS[k];
   const tag = typeof raw.agentTag === 'string' && raw.agentTag.trim() ? raw.agentTag.trim().toLowerCase() : DEFAULT_SETTINGS.agentTag;
   return {
     workMinutes: num('workMinutes', 0, 960),
@@ -75,7 +82,9 @@ export function readSettings(raw: Record<string, unknown>): Settings {
     agentAttentionMinutes: num('agentAttentionMinutes', 5, 120),
     maxParallelAgents: num('maxParallelAgents', 1, 10),
     agentTag: tag,
-    startFactor: num('startFactor', 1, 3)
+    startFactor: num('startFactor', 1, 3),
+    workStart: hhmm('workStart'),
+    workEnd: hhmm('workEnd')
   };
 }
 
@@ -174,10 +183,60 @@ export const SLIP_SPLIT = 3;
 
 // ---------------------------------------------------------------- capaciteit
 
-export function capacity(date: string, mode: WorkMode, s: Settings): Record<Bucket, number> {
+export function capacity(date: string, mode: WorkMode, s: Settings, busy: Busy = NO_BUSY): Record<Bucket, number> {
   const weekend = isWeekend(date);
   const work = mode === 'off' ? 0 : mode === 'busy' ? s.workBusyMinutes : s.workMinutes;
-  return { work, personal: weekend ? s.personalWeekendMinutes : s.personalWeekdayMinutes };
+  const personal = weekend ? s.personalWeekendMinutes : s.personalWeekdayMinutes;
+  // Bij een vrije dag valt werktijd weg, dus telt de afspraak dan helemaal voor Privé.
+  const busyPersonal = mode === 'off' ? busy.personal + busy.work : busy.personal;
+  return { work: Math.max(0, work - (mode === 'off' ? 0 : busy.work)), personal: Math.max(0, personal - busyPersonal) };
+}
+
+// ---------------------------------------------------------------- agenda
+
+export type Busy = { work: number; personal: number };
+export const NO_BUSY: Busy = { work: 0, personal: 0 };
+export type CalItem = { start: number; end: number; allDay: boolean };
+
+/** Uren waarin privétijd telt; afspraken 's nachts eten geen avond op. */
+const AWAKE: [number, number] = [7 * 60, 23 * 60];
+const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/**
+ * Hoeveel minuten afspraken op deze dag innemen, verdeeld over het werkvenster (alleen op werkdagen) en de
+ * rest van de wakkere uren. Hele-dagafspraken tellen niet (verjaardagen, vakanties); overlap telt één keer.
+ */
+export function busyMinutes(items: CalItem[], day: string, timeZone: string, s: Settings): Busy {
+  const local = (ms: number) => {
+    const d = todayInZone(new Date(ms), timeZone);
+    if (d < day) return 0;
+    if (d > day) return 24 * 60;
+    return minutesOf(timeInZone(new Date(ms), timeZone));
+  };
+  const spans = items
+    .filter((i) => !i.allDay && i.end > i.start)
+    .map((i) => [local(i.start), local(i.end)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const merged: [number, number][] = [];
+  for (const [a, b] of spans) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else merged.push([a, b]);
+  }
+  const overlap = (a: number, b: number, lo: number, hi: number) => Math.max(0, Math.min(b, hi) - Math.max(a, lo));
+  const weekend = isWeekend(day);
+  const [ws, we] = [minutesOf(s.workStart), minutesOf(s.workEnd)];
+  let work = 0;
+  let personal = 0;
+  for (const [a, b] of merged) {
+    const inWork = weekend ? 0 : overlap(a, b, ws, we);
+    const awake = overlap(a, b, AWAKE[0], AWAKE[1]);
+    const awakeInWork = weekend ? 0 : overlap(Math.max(a, AWAKE[0]), Math.min(b, AWAKE[1]), ws, we);
+    work += inWork;
+    personal += awake - awakeInWork;
+  }
+  return { work, personal };
 }
 
 export const defaultWorkMode = (date: string): WorkMode => (isWeekend(date) ? 'off' : 'normal');
@@ -201,8 +260,8 @@ export type Load = {
 };
 
 /** Belasting van een set taken: (agent ? aandacht : duur) × factor, per balk. */
-export function loadOf(tasks: Task[], date: string, mode: WorkMode, factor: number, s: Settings): Load {
-  const cap = capacity(date, mode, s);
+export function loadOf(tasks: Task[], date: string, mode: WorkMode, factor: number, s: Settings, busy: Busy = NO_BUSY): Load {
+  const cap = capacity(date, mode, s, busy);
   const items = tasks.map((t): LoadItem => {
     const agent = isAgentTask(t, s);
     const est = estimateOf(t);
@@ -263,9 +322,10 @@ export function suggest(
   today: string,
   mode: WorkMode,
   factor: number,
-  s: Settings
+  s: Settings,
+  busy: Busy = NO_BUSY
 ): string[] {
-  const cap = capacity(today, mode, s);
+  const cap = capacity(today, mode, s, busy);
   const used: Record<Bucket, number> = { work: 0, personal: 0 };
   let agents = 0;
   const picked: string[] = [];

@@ -41,6 +41,12 @@ type Day = {
   extra: Item[];
   planned: Item[];
   inbox: number;
+  agenda: {
+    configured: boolean;
+    failed: number;
+    items: { title: string; calendar: string; allDay: boolean; start: string | null; end: string | null }[];
+    busy: Record<Bucket, number>;
+  };
 };
 
 type I18n = ReturnType<typeof useT>;
@@ -214,6 +220,8 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
         </p>
       </section>
 
+      <AgendaBlock day={day} i18n={i18n} />
+
       {leftovers.length > 0 && (
         <section className="ld-section">
           <div className="ld-sh">
@@ -343,6 +351,43 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
         )}
       </div>
     </main>
+  );
+}
+
+function AgendaBlock({ day, i18n }: { day: Day; i18n: I18n }) {
+  const { t, lang } = i18n;
+  const a = day.agenda;
+  if (!a.configured) return null;
+  const busy = (['work', 'personal'] as const).filter((b) => a.busy[b] > 0);
+  return (
+    <section className="ld-section" aria-label={t('agendaH')}>
+      <div className="ld-sh">
+        <h2>{t('agendaH')}</h2>
+      </div>
+      {a.failed > 0 && a.items.length === 0 ? (
+        <p className="ld-meta" role="status">
+          {MARK.tight} {t('agendaDown')}
+        </p>
+      ) : a.items.length === 0 ? (
+        <p className="ld-meta">{t('agendaEmpty')}</p>
+      ) : (
+        <ul className="ld-list">
+          {a.items.map((e, i) => (
+            <li key={i} className="ld-item dp-item dp-cal">
+              <span className="ld-data dp-time">{e.allDay ? t('allDay') : `${e.start}–${e.end}`}</span>
+              <span className="ld-title-static">{e.title || '…'}</span>
+              <span className="ld-meta">{e.calendar}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {busy.length > 0 && (
+        <p className="ld-meta">
+          {t('agendaBusy', { parts: busy.map((b) => `${fmtMinutes(a.busy[b], lang)} ${t(`bucket_${b}`)}`).join(' · ') })}
+        </p>
+      )}
+      {a.failed > 0 && a.items.length > 0 && <p className="ld-meta">{t('agendaPartly', { n: a.failed })}</p>}
+    </section>
   );
 }
 

@@ -51,6 +51,18 @@ const manifest: ModuleManifest = {
       max: 10,
       integer: true
     },
+    {
+      key: 'useCalendar',
+      type: 'boolean',
+      label: { nl: 'Privé-agenda meetellen', en: 'Count the personal calendar' },
+      help: {
+        nl: 'Afspraken uit de gedeelde agenda (CALENDAR_FEEDS) gaan van de beschikbare tijd af. Nooit de werkagenda.',
+        en: 'Events from the shared calendar (CALENDAR_FEEDS) are taken off the available time. Never the work calendar.'
+      },
+      default: true
+    },
+    { key: 'workStart', type: 'string', label: { nl: 'Werkdag begint (HH:MM)', en: 'Workday starts (HH:MM)' }, default: '08:30', maxLength: 5 },
+    { key: 'workEnd', type: 'string', label: { nl: 'Werkdag eindigt (HH:MM)', en: 'Workday ends (HH:MM)' }, default: '17:00', maxLength: 5 },
     { key: 'agentTag', type: 'string', label: { nl: 'Tag voor agenttaken', en: 'Tag for agent tasks' }, default: 'agent', maxLength: 40 },
     {
       key: 'startFactor',
@@ -83,6 +95,7 @@ const manifest: ModuleManifest = {
   ],
   env: [
     { name: 'MISTRAL_API_KEY', secret: true, description: { nl: 'Voor AI-schattingen (optioneel; zonder sleutel alleen de vaste regel).', en: 'For AI estimates (optional; without it only the fixed rule).' } },
+    { name: 'CALENDAR_FEEDS', secret: true, description: { nl: 'Privé-agenda\'s (gedeeld met andere modules); valt terug op BRIEFING_CALENDAR_FEEDS.', en: 'Personal calendars (shared with other modules); falls back to BRIEFING_CALENDAR_FEEDS.' } },
     { name: 'DAGPLANNING_MODEL', description: { nl: 'Mistral-model voor schattingen (standaard mistral-small-latest).', en: 'Mistral model for estimates (default mistral-small-latest).' } }
   ]
 };

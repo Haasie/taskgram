@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Task } from '../../shared/types.js';
 import {
   adjustEstimate,
+  busyMinutes,
+  capacity,
   candidates,
   correctionFactor,
   DEFAULT_SETTINGS,
@@ -153,5 +155,36 @@ describe('voorstel voor de ochtend', () => {
     expect(c.today.map((t) => t.id)).toEqual([todays.id]);
     expect(c.extra.map((t) => t.id)).toEqual([fav.id]);
     expect(c.inbox).toBe(1);
+  });
+});
+
+describe('agenda: afspraken nemen tijd', () => {
+  const at = (iso: string) => Date.parse(iso);
+  const TZ = 'Europe/Amsterdam';
+
+  it('binnen werktijd telt voor Werk, daarbuiten voor Privé; overlap telt één keer; hele dag telt niet', () => {
+    const busy = busyMinutes(
+      [
+        { start: at('2026-11-16T09:00:00Z'), end: at('2026-11-16T10:00:00Z'), allDay: false }, // 10:00–11:00 lokaal
+        { start: at('2026-11-16T09:30:00Z'), end: at('2026-11-16T10:30:00Z'), allDay: false }, // overlapt → tot 11:30
+        { start: at('2026-11-16T18:00:00Z'), end: at('2026-11-16T19:30:00Z'), allDay: false }, // 19:00–20:30
+        { start: at('2026-11-16T00:00:00Z'), end: at('2026-11-17T00:00:00Z'), allDay: true }
+      ],
+      TODAY,
+      TZ,
+      DEFAULT_SETTINGS
+    );
+    expect(busy).toEqual({ work: 90, personal: 90 });
+  });
+
+  it('in het weekend telt alles voor Privé, en nachtelijke uren niet', () => {
+    const busy = busyMinutes([{ start: at('2026-11-14T21:00:00Z'), end: at('2026-11-15T07:00:00Z'), allDay: false }], '2026-11-14', TZ, DEFAULT_SETTINGS);
+    expect(busy).toEqual({ work: 0, personal: 60 }); // 22:00–23:00 lokaal
+  });
+
+  it('capaciteit gaat omlaag met de afspraken, nooit onder nul; op een vrije dag telt alles voor Privé', () => {
+    expect(capacity(TODAY, 'normal', DEFAULT_SETTINGS, { work: 90, personal: 30 })).toEqual({ work: 210, personal: 60 });
+    expect(capacity(TODAY, 'normal', DEFAULT_SETTINGS, { work: 900, personal: 900 })).toEqual({ work: 0, personal: 0 });
+    expect(capacity(TODAY, 'off', DEFAULT_SETTINGS, { work: 60, personal: 0 })).toEqual({ work: 0, personal: 30 });
   });
 });

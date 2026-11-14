@@ -9,6 +9,7 @@ import { createModuleStore } from '../../server/modules/store.js';
 import { MODULES } from '../../server/modules/discover.js';
 import { UpstreamError, type PostgramClient, type RawEntity } from '../../server/postgram.js';
 import { createEstimator } from './estimator.js';
+import type { CalendarSource } from '../../server/calendar.js';
 
 const SECRET = 'x'.repeat(40);
 const config: Config = {
@@ -71,11 +72,14 @@ function task(i: number, content: string, extra: Partial<RawEntity> = {}): RawEn
   } as RawEntity;
 }
 
-function setup(seed: RawEntity[], opts: { enabled?: boolean; estimator?: (titles: string[]) => Promise<number[] | null> } = {}) {
+function setup(
+  seed: RawEntity[],
+  opts: { enabled?: boolean; estimator?: (titles: string[]) => Promise<number[] | null>; calendar?: CalendarSource | null } = {}
+) {
   const { pg, store, spies } = fakePg(seed);
   const moduleStore = createModuleStore(mkdtempSync(join(tmpdir(), 'tg-dagplanning-')), MODULES);
   if (opts.enabled !== false) moduleStore.setEnabled('dagplanning', true);
-  const runtime = createModuleRuntime({ pg, store: moduleStore, env: {}, timeZone: 'Europe/Amsterdam' });
+  const runtime = createModuleRuntime({ pg, store: moduleStore, env: {}, timeZone: 'Europe/Amsterdam', calendar: opts.calendar ?? null });
   if (opts.estimator) (runtime.contexts.get('dagplanning')!.state as any).estimator = opts.estimator;
   const app = createApp(config, pg, { moduleRuntime: runtime });
   const call = async (method: string, path: string, body?: unknown) => {
@@ -151,6 +155,43 @@ describe('dagplanning: ochtend', () => {
     const saved = await call('PUT', '/day', { date: DAY, planned: [], workMode: 'normal', moves: [{ id: id(1), to: 'later' }] });
     expect(saved.status).toBe(200);
     expect(store.get(id(1))).toMatchObject({ status: 'next', metadata: { start_date: null } });
+  });
+});
+
+describe('dagplanning: privé-agenda', () => {
+  const source = (occurrences: { title: string; start: string; end: string; allDay?: boolean }[], failed = 0): CalendarSource => ({
+    feeds: 1,
+    between: async () => ({
+      occurrences: occurrences.map((o, i) => ({ uid: `u${i}`, title: o.title, allDay: o.allDay ?? false, start: Date.parse(o.start), end: Date.parse(o.end), calendar: 'Gezin' })),
+      failed,
+      total: 1
+    })
+  });
+
+  it('toont de afspraken van vandaag en haalt hun tijd van de capaciteit af', async () => {
+    const { call } = setup([task(1, 'Erik bellen')], {
+      calendar: source([
+        { title: 'Tandarts', start: '2026-11-16T09:00:00Z', end: '2026-11-16T10:00:00Z' },
+        { title: 'Zwemles', start: '2026-11-16T17:30:00Z', end: '2026-11-16T18:15:00Z' },
+        { title: 'Gisteren', start: '2026-11-15T09:00:00Z', end: '2026-11-15T10:00:00Z' }
+      ])
+    });
+    const { json } = await call('GET', `/day?date=${DAY}`);
+    expect(json.agenda.items).toEqual([
+      { title: 'Tandarts', calendar: 'Gezin', allDay: false, start: '10:00', end: '11:00' },
+      { title: 'Zwemles', calendar: 'Gezin', allDay: false, start: '18:30', end: '19:15' }
+    ]);
+    expect(json.agenda.busy).toEqual({ work: 60, personal: 45 });
+    expect(json.settings.capacity.normal).toEqual({ work: 240, personal: 45 });
+  });
+
+  it('zonder agenda of als hij wegvalt, rekent de planning gewoon zonder', async () => {
+    const none = await setup([task(1, 'Erik bellen')]).call('GET', `/day?date=${DAY}`);
+    expect(none.json.agenda).toMatchObject({ configured: false, items: [] });
+    const broken: CalendarSource = { feeds: 1, between: async () => { throw new Error('weg'); } };
+    const down = await setup([task(1, 'Erik bellen')], { calendar: broken }).call('GET', `/day?date=${DAY}`);
+    expect(down.json.agenda).toMatchObject({ configured: true, failed: 1, busy: { work: 0, personal: 0 } });
+    expect(down.json.settings.capacity.normal).toEqual({ work: 300, personal: 90 });
   });
 });
 
