@@ -69,8 +69,8 @@ const manifest: ModuleManifest = {
       type: 'boolean',
       label: { nl: 'AI-schattingen', en: 'AI estimates' },
       help: {
-        nl: 'Stuurt alleen de titel (eerste regel) van taken zonder schatting naar Claude. Werkt alleen met ANTHROPIC_API_KEY.',
-        en: 'Sends only the title (first line) of tasks without an estimate to Claude. Needs ANTHROPIC_API_KEY.'
+        nl: 'Stuurt alleen de titel (eerste regel) van taken zonder schatting naar Mistral. Werkt alleen met MISTRAL_API_KEY.',
+        en: 'Sends only the title (first line) of tasks without an estimate to Mistral. Needs MISTRAL_API_KEY.'
       },
       default: true
     },
@@ -82,8 +82,8 @@ const manifest: ModuleManifest = {
     }
   ],
   env: [
-    { name: 'ANTHROPIC_API_KEY', secret: true, description: { nl: 'Voor AI-schattingen (optioneel; zonder sleutel alleen de vaste regel).', en: 'For AI estimates (optional; without it only the fixed rule).' } },
-    { name: 'DAGPLANNING_MODEL', description: { nl: 'Claude-model voor schattingen (standaard claude-opus-5-5).', en: 'Claude model for estimates (default claude-opus-5-5).' } }
+    { name: 'MISTRAL_API_KEY', secret: true, description: { nl: 'Voor AI-schattingen (optioneel; zonder sleutel alleen de vaste regel).', en: 'For AI estimates (optional; without it only the fixed rule).' } },
+    { name: 'DAGPLANNING_MODEL', description: { nl: 'Mistral-model voor schattingen (standaard mistral-small-latest).', en: 'Mistral model for estimates (default mistral-small-latest).' } }
   ]
 };
 

@@ -1,5 +1,7 @@
-import type { RawEntity } from '../../server/postgram.js';
 import type { DayPlan, WorkMode } from './logic.js';
+
+/** Het deel van een Postgram-entity dat hier nodig is (geen import uit server/: dit bestand valt ook onder de client-typecheck). */
+type PlanEntity = { id: string; version: number; metadata?: Record<string, unknown> | null };
 
 /**
  * Een dagplan is een Postgram-document met tag `dagplan` (zelfde patroon als het Leesdossier).
@@ -11,7 +13,7 @@ export const PLAN_TAG = 'dagplan';
 const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 const MODES: WorkMode[] = ['normal', 'busy', 'off'];
 
-export function planFromEntity(e: RawEntity): DayPlan | null {
+export function planFromEntity(e: PlanEntity): DayPlan | null {
   const m = (e.metadata ?? {}) as Record<string, unknown>;
   if (typeof m.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(m.date)) return null;
   const est: Record<string, number> = {};

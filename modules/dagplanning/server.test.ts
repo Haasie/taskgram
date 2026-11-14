@@ -192,11 +192,26 @@ describe('dagplanning: schatten', () => {
     expect(store.get(id(1))!.metadata).toMatchObject({ estimate_min: 45, estimate_source: 'user' });
   });
 
-  it('de AI-schatter stuurt een genummerde lijst en rondt af op stappen', async () => {
-    const parse = vi.fn(async () => ({ stop_reason: 'end_turn', parsed_output: { estimates: [{ n: 1, minutes: 37 }, { n: 2, minutes: 200 }] } }));
-    const est = createEstimator({}, { messages: { parse } } as any)!;
+  it('de Mistral-schatter stuurt een genummerde lijst in JSON-modus en rondt af op stappen', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ estimates: [{ n: 1, minutes: 37 }, { n: 2, minutes: 200 }] }) } }] }), { status: 200 })
+    );
+    const est = createEstimator({ MISTRAL_API_KEY: 'k' }, fetchImpl as unknown as typeof fetch)!;
     expect(await est(['Een', 'Twee'])).toEqual([30, 180]);
-    expect((parse.mock.calls[0] as any)[0]).toMatchObject({ model: 'claude-opus-5-5', output_config: { effort: 'low' }, messages: [{ role: 'user', content: 'Tasks:\n1. Een\n2. Twee' }] });
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe('https://api.mistral.ai/v1/chat/completions');
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({ model: 'mistral-small-latest', response_format: { type: 'json_object' } });
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'Tasks:\n1. Een\n2. Twee' });
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer k');
+  });
+
+  it('de Mistral-schatter geeft null bij een fout of onzin, zodat de regel het overneemt', async () => {
+    const down = createEstimator({ MISTRAL_API_KEY: 'k' }, (async () => new Response('{}', { status: 503 })) as unknown as typeof fetch)!;
+    expect(await down(['Een'])).toBeNull();
+    const junk = createEstimator({ MISTRAL_API_KEY: 'k' }, (async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'geen json' } }] }), { status: 200 })) as unknown as typeof fetch)!;
+    expect(await junk(['Een'])).toBeNull();
   });
 
   it('zonder sleutel geen AI-schatter', () => {

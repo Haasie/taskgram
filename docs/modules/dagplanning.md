@@ -47,9 +47,9 @@ Planned tasks that were not on Today yet are moved there.
 Each task gets `metadata.estimate_min` and `metadata.estimate_source` (`ai`, `rule` or `user`) the first time it shows
 up in the morning ritual without one. Values are snapped to 5, 10, 15, 30, 45, 60, 90, 120, 180 or 240 minutes.
 
-- **AI** (setting *AI estimates* on and `ANTHROPIC_API_KEY` set): only the **title (first line)** of each task is sent
-  to Claude, never notes or checklists, in batches of up to 25. Model: `DAGPLANNING_MODEL`, default `claude-opus-5-5`,
-  at low effort. If the call fails or is declined, the rule takes over.
+- **AI** (setting *AI estimates* on and `MISTRAL_API_KEY` set): only the **title (first line)** of each task is sent
+  to Mistral (chat completions, JSON mode), never notes or checklists, in batches of up to 25. Model:
+  `DAGPLANNING_MODEL`, default `mistral-small-latest`. If the call fails or returns something unusable, the rule takes over.
 - **Rule** (always available, nothing leaves the server): the kind of verb in the title (*call*, *mail* → 15 min;
   *review*, *check* → 30; *prepare*, *write*, meetings → 60; *build*, *deliver*, *migrate* → 120), plus 10 minutes per
   open checklist item.
@@ -90,12 +90,13 @@ the evening with a plan it starts with *n of m planned done · close your day*.
 | Maximum agents at once | 3 | Above this the plan asks for confirmation |
 | Tag for agent tasks | `agent` | |
 | Starting correction | 1.5 | Until 5 closed days |
-| AI estimates | on | Needs `ANTHROPIC_API_KEY` |
+| AI estimates | on | Needs `MISTRAL_API_KEY` |
 | Open the ritual on first launch each day | on | Once per day per device, only from the start screen or Today |
 
 ## Environment
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | no | Enables AI estimates. Without it the module uses the rule only. |
-| `DAGPLANNING_MODEL` | no | Claude model for estimates, default `claude-opus-5-5` |
+| `MISTRAL_API_KEY` | no | Enables AI estimates. Without it the module uses the rule only. |
+| `DAGPLANNING_MODEL` | no | Mistral model for estimates, default `mistral-small-latest` |
+| `MISTRAL_BASE_URL` | no | Default `https://api.mistral.ai/v1` |
