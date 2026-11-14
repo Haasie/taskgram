@@ -25,3 +25,4 @@
 }
 /* De gedeelde vlag begint met "? " (voor "nog controleren"); hier is het een feit, geen vraag. */
 .dp .ld-flag::before { content: none; }
+.dp .dp-time { min-width: 92px; color: var(--ink-muted); }

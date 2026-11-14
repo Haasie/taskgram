@@ -22,6 +22,20 @@ closed day plans correct it.
   run time, only your attention for kicking off and reviewing (default 20 minutes). Above *maximum agents at once*
   (default 3) the plan asks for confirmation, because more agents means more switching.
 
+## Personal calendar
+
+If Taskgram has calendar feeds (`CALENDAR_FEEDS`, or `BRIEFING_CALENDAR_FEEDS` for existing installs — see
+[Shared calendar](README.md#shared-calendar)), the morning screen lists today's events and takes their time off the
+available time:
+
+- Timed events inside the workday window (*Workday starts/ends*, default 08:30–17:00, weekdays only) count against
+  **Work**; the rest of the waking hours (07:00–23:00) count against **Personal**. On a day set to *off*, everything counts
+  against Personal.
+- Overlapping events count once. All-day events (birthdays, holidays) are shown but do not take time.
+- If a feed is unreachable the plan counts without it and says so.
+
+Only personal feeds belong here. Your work calendar is never read.
+
 ## The rituals
 
 **Morning** (opened by the morning push, or automatically on the first launch of the day)
@@ -89,6 +103,8 @@ the evening with a plan it starts with *n of m planned done · close your day*.
 | Attention per agent task | 20 min | Kick-off plus review |
 | Maximum agents at once | 3 | Above this the plan asks for confirmation |
 | Tag for agent tasks | `agent` | |
+| Count the personal calendar | on | Uses the shared calendar feeds |
+| Workday starts / ends | 08:30 / 17:00 | Events in this window count against Work |
 | Starting correction | 1.5 | Until 5 closed days |
 | AI estimates | on | Needs `MISTRAL_API_KEY` |
 | Open the ritual on first launch each day | on | Once per day per device, only from the start screen or Today |
@@ -100,3 +116,4 @@ the evening with a plan it starts with *n of m planned done · close your day*.
 | `MISTRAL_API_KEY` | no | Enables AI estimates. Without it the module uses the rule only. |
 | `DAGPLANNING_MODEL` | no | Mistral model for estimates, default `mistral-small-latest` |
 | `MISTRAL_BASE_URL` | no | Default `https://api.mistral.ai/v1` |
+| `CALENDAR_FEEDS` | no | Personal calendar feeds, shared by all modules (falls back to `BRIEFING_CALENDAR_FEEDS`) |

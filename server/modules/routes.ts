@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth.js';
 import type { PostgramClient } from '../postgram.js';
 import type { DigestMessage } from '../../shared/digest.js';
+import { calendarFromEnv, type CalendarSource } from '../calendar.js';
 import { validateSettings } from '../../modules/settings.js';
 import type { ModuleSettings } from '../../modules/types.js';
 import { MODULES_WITH_SERVER, moduleById } from './discover.js';
@@ -18,6 +19,8 @@ export type ModuleContext = {
   /** Actuele instellingen van deze module (standaardwaarden ingevuld). */
   settings: () => ModuleSettings;
   state: Record<string, unknown>;
+  /** Gedeelde privé-agenda (CALENDAR_FEEDS of BRIEFING_CALENDAR_FEEDS); null = geen agenda ingesteld. Eén cache voor alle modules. */
+  calendar: CalendarSource | null;
 };
 
 export type ModuleServer = {
@@ -43,20 +46,30 @@ const settingsBody = z.object({ values: z.record(z.string(), z.unknown()).defaul
 const disabled = (c: { json: (body: unknown, status: 404) => Response }) =>
   c.json({ error: { code: 'MODULE_DISABLED', message: 'Module is disabled' } }, 404);
 
-export type ModuleDeps = { pg: PostgramClient; store: ModuleStore; env?: Record<string, string | undefined>; timeZone?: string };
+export type ModuleDeps = {
+  pg: PostgramClient;
+  store: ModuleStore;
+  env?: Record<string, string | undefined>;
+  timeZone?: string;
+  /** Alleen voor tests: een eigen agendabron (anders uit env). */
+  calendar?: CalendarSource | null;
+};
 
 /** Eén runtime per server: dezelfde context voor de API en de achtergrondtaken van een module. */
 export function createModuleRuntime(deps: ModuleDeps) {
+  const timeZone = deps.timeZone ?? 'Europe/Amsterdam';
+  const calendar = deps.calendar !== undefined ? deps.calendar : calendarFromEnv(deps.env ?? {}, timeZone);
   const contexts = new Map<string, ModuleContext>(
     [...servers.keys()].map((id) => [
       id,
       {
         pg: deps.pg,
         env: deps.env ?? {},
-        timeZone: deps.timeZone ?? 'Europe/Amsterdam',
+        timeZone,
         isEnabled: () => deps.store.isEnabled(id),
         settings: () => deps.store.settings(id),
-        state: {}
+        state: {},
+        calendar
       }
     ])
   );

@@ -20,6 +20,19 @@ item, optionally its own server API, that you switch on or off under **Settings 
 - **Postgram stays the source of truth.** Modules read and write Postgram entities; they keep no data of their own
   besides the settings above.
 
+## Shared calendar
+
+Modules that need the personal calendar read it from `ctx.calendar` instead of fetching feeds themselves. There is one
+source with one cache (15 minutes) for all modules, so a feed is fetched once per quarter-hour however many modules read
+it (iCloud throttles clients that come too often).
+
+- **Configuration:** `CALENDAR_FEEDS` (or `BRIEFING_CALENDAR_FEEDS` for existing installs), a JSON list
+  `[{"naam":"Gezin","url":"webcal://…"}]`. `webcal://` becomes `https://`; `http://` only to localhost. Without it,
+  `ctx.calendar` is `null`.
+- **Use:** `await ctx.calendar.between({ fromDay, toDay })` → `{ occurrences, failed, total }`, with recurrences expanded
+  (`shared/ical.ts`). A feed that fails is counted in `failed`; the last good copy is used for up to 24 hours.
+- **Secrets:** feed URLs never reach the browser or the logs (only the error type is logged).
+
 ## Building a module
 
 A module is one folder under `modules/` — there is no central list to edit:
@@ -66,7 +79,7 @@ Use `import '../_design'` and the `ld-*` classes for the shared *Dossier* (light
 **Server** (`server/modules/routes.ts`, `ModuleContext`):
 
 ```ts
-export function routes(ctx: ModuleContext) {        // ctx: pg, env, timeZone, isEnabled(), settings(), state
+export function routes(ctx: ModuleContext) {        // ctx: pg, env, timeZone, isEnabled(), settings(), state, calendar
   const api = new Hono<AuthEnv>();
   api.get('/items', async (c) => c.json({ items: await ctx.pg.listEntities('document', [String(ctx.settings().tag)]) }));
   return api;

@@ -4,7 +4,8 @@ import type { AuthEnv } from '../../server/auth.js';
 import { toTask } from '../../server/mappers.js';
 import type { ModuleContext } from '../../server/modules/routes.js';
 import type { RawEntity } from '../../server/postgram.js';
-import { addDays, todayInZone } from '../../shared/dates.js';
+import { addDays, timeInZone, todayInZone } from '../../shared/dates.js';
+import { dayWindow } from '../../server/calendar.js';
 import { completionDayInZone, type DigestMessage } from '../../shared/digest.js';
 import { deadline, isOpen, priority } from '../../shared/taskFields.js';
 import type { Task } from '../../shared/types.js';
@@ -12,8 +13,11 @@ import { createEstimator, MAX_BATCH, type Estimator } from './estimator.js';
 import {
   adjustEstimate,
   bucketOf,
+  busyMinutes,
   candidates,
   capacity,
+  NO_BUSY,
+  type Busy,
   correctionFactor,
   defaultWorkMode,
   estimateOf,
@@ -126,6 +130,39 @@ function closePlan(p: DayPlan, done: Task[], timeZone: string): DayPlan {
   return { ...p, closed: true, done: p.planned.filter((id) => doneOnDay.has(id)) };
 }
 
+export type AgendaItem = { title: string; calendar: string; allDay: boolean; start: string | null; end: string | null };
+type Agenda = { configured: boolean; failed: number; items: AgendaItem[]; busy: Busy };
+
+/**
+ * Afspraken van vandaag uit de gedeelde privé-agenda, en hoeveel tijd ze innemen. Werkagenda komt hier nooit:
+ * alleen feeds uit CALENDAR_FEEDS/BRIEFING_CALENDAR_FEEDS. Valt de agenda weg, dan rekent de planning zonder.
+ */
+async function agendaFor(ctx: ModuleContext, day: string, s: Settings): Promise<Agenda> {
+  if (!ctx.calendar || (ctx.settings().useCalendar === false)) return { configured: false, failed: 0, items: [], busy: NO_BUSY };
+  try {
+    const r = await ctx.calendar.between(dayWindow(day));
+    const localDay = (ms: number) => todayInZone(new Date(ms), ctx.timeZone);
+    // Het opgehaalde venster is ruimer dan de dag (tijdzones); hier alleen wat de dag echt raakt.
+    const touches = (o: { start: number; end: number; allDay: boolean }) =>
+      o.allDay
+        ? new Date(o.start).toISOString().slice(0, 10) <= day && (new Date(o.end).toISOString().slice(0, 10) > day || new Date(o.start).toISOString().slice(0, 10) === day)
+        : localDay(o.start) <= day && (localDay(o.end) > day || (localDay(o.end) === day && timeInZone(new Date(o.end), ctx.timeZone) !== '00:00'));
+    const own = r.occurrences.filter(touches);
+    const items = own
+      .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start - b.start)
+      .map((o) => ({
+        title: o.title.slice(0, 120),
+        calendar: o.calendar,
+        allDay: o.allDay,
+        start: o.allDay ? null : timeInZone(new Date(o.start), ctx.timeZone),
+        end: o.allDay ? null : timeInZone(new Date(o.end), ctx.timeZone)
+      }));
+    return { configured: true, failed: r.failed, items, busy: busyMinutes(own, day, ctx.timeZone, s) };
+  } catch {
+    return { configured: true, failed: ctx.calendar.feeds, items: [], busy: NO_BUSY };
+  }
+}
+
 type View = ReturnType<typeof slim>;
 function slim(t: Task, s: Settings, slips: Map<string, number>) {
   const est = estimateOf(t);
@@ -148,7 +185,7 @@ function slim(t: Task, s: Settings, slips: Map<string, number>) {
 /** Alles voor het ritueel van één dag in één antwoord. */
 async function dayView(ctx: ModuleContext, day: string) {
   const s = settingsOf(ctx);
-  const [tasks, plansRaw] = await Promise.all([openTasks(ctx), loadPlans(ctx)]);
+  const [tasks, plansRaw, agenda] = await Promise.all([openTasks(ctx), loadPlans(ctx), agendaFor(ctx, day, s)]);
   const plans = await closeStale(ctx, plansRaw, day);
   const plan = plans.find((p) => p.date === day) ?? null;
   const history = plans.filter((p) => p.date < day);
@@ -159,7 +196,7 @@ async function dayView(ctx: ModuleContext, day: string) {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const cand = candidates(tasks, day, previous);
   const pool = [...cand.leftovers, ...cand.today, ...cand.extra];
-  const plannedIds = plan ? plan.planned : suggest(cand.today, day, mode, factor.factor, s);
+  const plannedIds = plan ? plan.planned : suggest(cand.today, day, mode, factor.factor, s, agenda.busy);
   // Geplande taken die inmiddels af zijn, tellen we niet meer als belasting maar wel als 'af'.
   let doneToday: string[] = [];
   if (plan) {
@@ -170,7 +207,7 @@ async function dayView(ctx: ModuleContext, day: string) {
   const plannedTasks = plannedIds.map((id) => byId.get(id)).filter((t): t is Task => !!t);
   const seen = new Set(pool.map((t) => t.id));
   const extraPlanned = plannedTasks.filter((t) => !seen.has(t.id) && isOpen(t));
-  const load = loadOf(plannedTasks.filter(isOpen), day, mode, factor.factor, s);
+  const load = loadOf(plannedTasks.filter(isOpen), day, mode, factor.factor, s, agenda.busy);
   const view = (list: Task[]): View[] => list.map((t) => slim(t, s, slips));
   return {
     date: day,
@@ -184,7 +221,7 @@ async function dayView(ctx: ModuleContext, day: string) {
     settings: {
       agentAttentionMinutes: s.agentAttentionMinutes,
       maxParallelAgents: s.maxParallelAgents,
-      capacity: { normal: capacity(day, 'normal', s), busy: capacity(day, 'busy', s), off: capacity(day, 'off', s) }
+      capacity: { normal: capacity(day, 'normal', s, agenda.busy), busy: capacity(day, 'busy', s, agenda.busy), off: capacity(day, 'off', s, agenda.busy) }
     },
     ai: s.aiEstimates && estimatorOf(ctx) !== null,
     missingEstimates: pool.filter((t) => typeof t.metadata.estimate_min !== 'number').length,
@@ -192,7 +229,8 @@ async function dayView(ctx: ModuleContext, day: string) {
     today: view([...cand.today, ...extraPlanned]),
     extra: view(cand.extra),
     planned: view(plannedTasks),
-    inbox: cand.inbox
+    inbox: cand.inbox,
+    agenda: { configured: agenda.configured, failed: agenda.failed, items: agenda.items, busy: agenda.busy }
   };
 }
 
@@ -245,7 +283,7 @@ export function routes(ctx: ModuleContext) {
   api.put('/day', async (c) => {
     const body = saveBody.parse(await c.req.json());
     const s = settingsOf(ctx);
-    const [tasks, plansRaw] = await Promise.all([openTasks(ctx), loadPlans(ctx)]);
+    const [tasks, plansRaw, agenda] = await Promise.all([openTasks(ctx), loadPlans(ctx), agendaFor(ctx, body.date, s)]);
     const plans = await closeStale(ctx, plansRaw, body.date);
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const existing = plans.find((p) => p.date === body.date);
@@ -254,7 +292,7 @@ export function routes(ctx: ModuleContext) {
     const planned = [...new Set(body.planned)].filter((id) => byId.has(id) || keep.has(id));
     const factor = correctionFactor(plans.filter((p) => p.date < body.date), s);
     const plannedTasks = planned.map((id) => byId.get(id)).filter((t): t is Task => !!t);
-    const load = loadOf(plannedTasks, body.date, body.workMode, factor.factor, s);
+    const load = loadOf(plannedTasks, body.date, body.workMode, factor.factor, s, agenda.busy);
     if (load.over && !body.ackOver) {
       return c.json({ error: { code: 'OVERCOMMITTED', message: 'Plan is fuller than your usual day' }, load }, 409);
     }

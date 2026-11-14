@@ -68,7 +68,13 @@ const nl = {
   level_room: 'Ruimte',
   level_tight: 'Krap',
   level_over: 'Overvol',
-  select: 'Plannen: {title}'
+  select: 'Plannen: {title}',
+  agendaH: 'Agenda',
+  agendaEmpty: 'Geen afspraken vandaag.',
+  agendaDown: 'Agenda niet bereikbaar; de planning rekent zonder afspraken.',
+  agendaPartly: '{n} agenda(’s) niet bereikbaar.',
+  agendaBusy: 'Afspraken nemen tijd af van: {parts}.',
+  allDay: 'Hele dag'
 };
 
 const en: typeof nl = {
@@ -138,7 +144,13 @@ const en: typeof nl = {
   level_room: 'Room',
   level_tight: 'Tight',
   level_over: 'Overfull',
-  select: 'Plan: {title}'
+  select: 'Plan: {title}',
+  agendaH: 'Calendar',
+  agendaEmpty: 'No events today.',
+  agendaDown: 'Calendar unreachable; the plan counts without events.',
+  agendaPartly: '{n} calendar(s) unreachable.',
+  agendaBusy: 'Events take time off: {parts}.',
+  allDay: 'All day'
 };
 
 type Key = keyof typeof nl;
