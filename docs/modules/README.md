@@ -5,6 +5,7 @@ item, optionally its own server API, that you switch on or off under **Settings 
 
 | Module | Route | Default | Docs |
 | --- | --- | --- | --- |
+| Dagplanning (day planning) | `#/dagplanning` | off | [dagplanning.md](dagplanning.md) |
 | Leesdossier (reading file) | `#/lezen` | off | [leesdossier.md](leesdossier.md) |
 | Werkradar / Privéradar | `#/radar/work`, `#/radar/personal` | on | [radar.md](radar.md) |
 | Cockpit | `#/cockpit` | off | [cockpit.md](cockpit.md) |
@@ -71,7 +72,13 @@ export function routes(ctx: ModuleContext) {        // ctx: pg, env, timeZone, i
   return api;
 }
 export function start(ctx: ModuleContext) { … }  // optional background job; check ctx.isEnabled() first
+export async function digest(ctx, kind, message, lang) { … } // optional: adjust the core morning/evening push
 ```
+
+- **`digest`** (optional) receives the core's morning or evening push (or `null` when the core had nothing to say) and
+  returns it, possibly changed (text, link). Modules never send extra notifications. Only enabled modules are asked.
+- **`startup: true`** in the manifest lets a module take over the screen on the first launch of the day (once per
+  device, only from the start screen or Today). The app asks `GET /api/modules/<id>/startup` → `{ open, date }`.
 
 Then add tests next to the module (`*.test.ts`, run by `npm test`) and, if it has UI, an e2e scenario.
 

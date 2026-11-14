@@ -224,7 +224,8 @@ test('E7: Settings persistence', async ({ page }) => {
   await page.getByRole('button', { name: 'Instellingen' }).click();
   await expect(page.getByText('Dagelijks overzicht')).toBeVisible();
 
-  const timeInput = page.locator('input[type="time"]');
+  // Eerste tijdveld = ochtendoverzicht (het tweede is de avondpush).
+  const timeInput = page.locator('input[type="time"]').first();
   await expect(timeInput).toHaveValue('07:30');
 
   await timeInput.fill('08:45');
@@ -232,7 +233,7 @@ test('E7: Settings persistence', async ({ page }) => {
 
   // Re-open settings to verify persistence
   await page.getByRole('button', { name: 'Instellingen' }).click();
-  await expect(page.locator('input[type="time"]')).toHaveValue('08:45');
+  await expect(page.locator('input[type="time"]').first()).toHaveValue('08:45');
 });
 
 test('E8: Mobile navigation @mobile', async ({ page, isMobile }) => {
@@ -723,6 +724,47 @@ test('E27: Cockpit toont features per fase, risico’s in woorden en een hervat-
 
     await expect(page.getByRole('region', { name: 'Review' }).getByRole('link', { name: 'PR open' })).toHaveAttribute('href', 'https://github.com/example/notes/pull/7');
     await expect(page.getByRole('region', { name: 'Zonder feature' })).toContainText('Ontbreekt');
+  } finally {
+    await toggle(false);
+  }
+});
+
+test('E28: Dagplanning opent het ochtendritueel, toont capaciteit in woorden en sluit de dag af @mobile', async ({ page }) => {
+  const toggle = async (enabled: boolean) =>
+    expect((await page.request.put('/api/modules/dagplanning', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } })).ok()).toBe(true);
+  await toggle(true);
+  try {
+    // Eerste keer openen vandaag: de app neemt je mee naar het ritueel.
+    await page.goto('/#/today');
+    await expect(page).toHaveURL(/#\/dagplanning/);
+    await expect(page.getByRole('heading', { name: 'Dagplanning' })).toBeVisible();
+
+    // Capaciteit per balk, met een woord (niet alleen kleur).
+    const werk = page.getByRole('meter', { name: 'Werk' });
+    await expect(werk).toHaveAttribute('aria-valuetext', /^(Ruimte|Krap|Overvol): /);
+    await expect(page.getByText(/Correctie ×1,?\.?5 \(start\)/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Plan vastleggen' }).click();
+    const ask = page.getByRole('alertdialog');
+    const saved = page.getByText('Plan staat. Begin met de bovenste.');
+    await expect(saved.or(ask)).toBeVisible();
+    if (await ask.isVisible()) await ask.getByRole('button', { name: 'Ja, bewust' }).click();
+    await expect(saved).toBeVisible();
+
+    const plans = (await state()).entities.filter((e) => e.type === 'document' && e.tags.includes('dagplan'));
+    expect(plans).toHaveLength(1);
+
+    // Avond: afsluiten, zonder oordeel.
+    await page.getByRole('button', { name: 'Opnieuw plannen' }).click();
+    await page.getByRole('tab', { name: 'Avond' }).click();
+    await expect(page.getByText(/Afgerond: \d+\. Bleef liggen: \d+\./)).toBeVisible();
+    await page.getByRole('button', { name: 'Dag afsluiten' }).click();
+    await expect(page.getByText('Dag afgesloten. Klaar voor vandaag.')).toBeVisible();
+
+    // Tweede keer openen vandaag: geen overname meer.
+    await page.goto('/#/today');
+    await page.reload();
+    await expect(page).toHaveURL(/#\/today/);
   } finally {
     await toggle(false);
   }

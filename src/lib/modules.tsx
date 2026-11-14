@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import { lazy, useEffect, useRef, type ComponentType, type LazyExoticComponent } from 'react';
 import { MODULES, moduleById } from './moduleRegistry';
 import type { ModuleManifest, ModuleSettings, ModuleStates, ModuleViewProps } from '../../modules/types.js';
-import { api, ApiError, type ModulesInfo } from './api';
+import { api, ApiError, request, type ModulesInfo } from './api';
 import { queryClient } from './queries';
 import { showToast } from './toast';
 import { getLang } from '../i18n/index.js';
@@ -91,4 +91,35 @@ export function ModuleIcon({ module, size = 16, className }: { module: ModuleMan
       ))}
     </svg>
   );
+}
+
+/**
+ * Modules met `startup: true` mogen bij de eerste keer openen per dag het scherm overnemen (bijv. een
+ * ochtendritueel). Eén keer per dag per apparaat, en alleen vanaf het startscherm of Vandaag: een diepe link
+ * (zoals een push naar een taak) gaat altijd voor.
+ */
+export function useStartupModule(routeKind: string, open: (id: string) => void) {
+  const enabled = useEnabledModules();
+  const asked = useRef(false);
+  useEffect(() => {
+    if (asked.current || enabled.length === 0) return;
+    asked.current = true;
+    if (routeKind !== 'home' && routeKind !== 'today') return;
+    const candidate = enabled.find((m) => m.startup);
+    if (!candidate) return;
+    const key = `tg-startup-${candidate.id}`;
+    void request<{ open: boolean; date?: string }>('GET', `/modules/${candidate.id}/startup`)
+      .then((r) => {
+        if (!r.open || !r.date) return;
+        let seen: string | null = null;
+        try {
+          seen = localStorage.getItem(key);
+          localStorage.setItem(key, r.date);
+        } catch {
+          // Geen opslag (privévenster): dan gewoon openen.
+        }
+        if (seen !== r.date) open(candidate.id);
+      })
+      .catch(() => {});
+  }, [enabled, routeKind, open]);
 }

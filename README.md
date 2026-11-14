@@ -120,6 +120,7 @@ server; secrets only come from environment variables.
 
 | Module | What it does | Docs |
 | --- | --- | --- |
+| **Dagplanning** | Morning and evening ritual with a capacity check per area that learns from what you actually finish; AI or rule-based estimates, agent tasks count only your attention | [docs/modules/dagplanning.md](docs/modules/dagplanning.md) |
 | **Leesdossier** | Reading list in Postgram with queue, backlog, quarterly goal, Markdown export and optional KOReader sync | [docs/modules/leesdossier.md](docs/modules/leesdossier.md) |
 | **Werkradar / Privéradar** | Project board per area from tagged Postgram projects | [docs/modules/radar.md](docs/modules/radar.md) |
 | **Cockpit** | Features per stage with their workspaces, unpushed/dirty/missing risks and resumable agent sessions (needs Postgram workspace tracking) | [docs/modules/cockpit.md](docs/modules/cockpit.md) |

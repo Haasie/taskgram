@@ -27,7 +27,8 @@ if (config.push && sender) {
     pg,
     store,
     sender,
-    timeZone: config.appTimezone
+    timeZone: config.appTimezone,
+    augment: moduleRuntime.augmentDigest
   });
   void scheduler.tick();
   setInterval(() => {
