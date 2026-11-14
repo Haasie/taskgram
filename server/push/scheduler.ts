@@ -1,5 +1,5 @@
 import { todayInZone, timeInZone } from '../../shared/dates.js';
-import { completionDayInZone, eveningDigest, morningDigest } from '../../shared/digest.js';
+import { completionDayInZone, eveningDigest, morningDigest, type DigestLang, type DigestMessage } from '../../shared/digest.js';
 import { deadline, startDate } from '../../shared/taskFields.js';
 import type { Task } from '../../shared/types.js';
 import { toTask } from '../mappers.js';
@@ -13,6 +13,8 @@ export type SchedulerDeps = {
   sender: PushSender;
   timeZone: string;
   now?: () => Date;
+  /** Modules mogen de ochtend- en avondpush aanvullen (zie ModuleServer.digest). */
+  augment?: (kind: 'morning' | 'evening', message: DigestMessage | null, lang: DigestLang) => Promise<DigestMessage | null>;
 };
 
 /**
@@ -71,7 +73,8 @@ export function createScheduler(deps: SchedulerDeps) {
 
         // 3. Digest (ochtend)
         if (state.settings.digestEnabled && time >= state.settings.digestTime && state.sent.digest !== today) {
-          const payload = morningDigest(tasks, today, lang);
+          const base = morningDigest(tasks, today, lang);
+          const payload = deps.augment ? await deps.augment('morning', base, lang) : base;
           if (payload) await sendAll(payload);
           deps.store.setDigestSent(today);
         }
@@ -86,7 +89,8 @@ export function createScheduler(deps: SchedulerDeps) {
           }
           // Lukt het tellen niet, dan volgende tick opnieuw proberen in plaats van een verkeerd getal te sturen.
           if (doneToday !== null) {
-            const payload = eveningDigest(tasks, doneToday, today, lang);
+            const base = eveningDigest(tasks, doneToday, today, lang);
+            const payload = deps.augment ? await deps.augment('evening', base, lang) : base;
             if (payload) await sendAll(payload);
             deps.store.setEveningSent(today);
           }

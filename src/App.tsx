@@ -46,6 +46,7 @@ import { isListedProject, projectTitle, UiContext, type Ui } from './components/
 import { WhenPicker, type PickerState } from './components/WhenPicker';
 import { LoginScreen } from './components/LoginScreen';
 import { ModuleOutlet } from './components/ModuleOutlet';
+import { useStartupModule } from './lib/modules';
 import { t, useLang } from './i18n/index.js';
 
 const LIST_KEYS: ListKind[] = ['inbox', 'today', 'upcoming', 'anytime', 'someday', 'waiting', 'logbook'];
@@ -116,6 +117,9 @@ export function App() {
   useEffect(() => {
     if (isDesktop && route.kind === 'home') navigate({ kind: 'today' });
   }, [isDesktop, route.kind, navigate]);
+
+  const openModule = useCallback((id: string) => navigate({ kind: 'module', id }), [navigate]);
+  useStartupModule(route.kind, openModule);
 
   const view: View | null = route.kind === 'home' || route.kind === 'module' ? null : route;
   // Filterwijzigingen veranderen de query; dat is geen nieuwe weergave.

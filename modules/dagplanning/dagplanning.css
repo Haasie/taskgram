@@ -1,0 +1,27 @@
+/* Dagplanning: bovenop de gedeelde Dossier/Terminal-stijl. Status = vorm + woord, kleur is alleen extra. */
+.dp .dp-item { grid-template-columns: auto minmax(0, 1fr) auto; }
+.dp .dp-check { width: 20px; height: 20px; accent-color: var(--gov); margin: 0 4px; }
+.dp .dp-tick { font: 600 16px/20px var(--mono); min-width: 20px; text-align: center; color: var(--gov); }
+.dp .dp-src { color: var(--ink-faint); }
+.dp .dp-agent {
+  margin-left: 8px; padding: 1px 5px; border: 1.5px solid var(--gov); color: var(--gov);
+  font: 600 10px/12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; vertical-align: 2px;
+}
+.dp .dp-meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.dp .dp-meter { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1.5px solid var(--rule-strong); background: var(--paper-raised); --t: var(--gov); }
+.dp .dp-meter.dp-tight { --t: var(--accent); }
+.dp .dp-meter.dp-over { --t: var(--sev-critical); border-color: var(--sev-critical); }
+.dp .dp-mhead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.dp .dp-word { margin-left: auto; font: 600 12px/16px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t); }
+.dp .dp-track { height: 10px; background: repeating-linear-gradient(90deg, var(--rule) 0 2px, transparent 2px 8px); border: 1px solid var(--rule-strong); }
+.dp .dp-track i { display: block; height: 100%; background: var(--t); }
+.dp .dp-agents.dp-over { color: var(--sev-critical); font-weight: 600; }
+.dp .dp-foot { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding-bottom: 32px; }
+.dp .dp-done { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; border-style: solid; }
+.dp .dp-done p { margin: 0; }
+@media (max-width: 560px) {
+  .dp .dp-item { grid-template-columns: auto minmax(0, 1fr); }
+  .dp .dp-item .ld-acts { grid-column: 2; justify-content: flex-start; }
+}
+/* De gedeelde vlag begint met "? " (voor "nog controleren"); hier is het een feit, geen vraag. */
+.dp .ld-flag::before { content: none; }

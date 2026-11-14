@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth.js';
 import type { PostgramClient } from '../postgram.js';
+import type { DigestMessage } from '../../shared/digest.js';
 import { validateSettings } from '../../modules/settings.js';
 import type { ModuleSettings } from '../../modules/types.js';
 import { MODULES_WITH_SERVER, moduleById } from './discover.js';
@@ -23,6 +24,11 @@ export type ModuleServer = {
   routes: (ctx: ModuleContext) => Hono<AuthEnv>;
   /** Optionele achtergrondtaak; moet zelf `isEnabled()` controleren vóór elke data-call. */
   start?: (ctx: ModuleContext) => void;
+  /**
+   * Optioneel: de ochtend- of avondpush van de core aanvullen of omleiden (tekst, link). Geen extra berichten:
+   * de module krijgt het bericht (of null als de core niets te melden had) en geeft het (gewijzigd) terug.
+   */
+  digest?: (ctx: ModuleContext, kind: 'morning' | 'evening', message: DigestMessage | null, lang: 'nl' | 'en') => Promise<DigestMessage | null>;
 };
 
 // Serverdeel per module laden volgens de mapconventie; modules zonder server.ts hebben geen API.
@@ -57,6 +63,19 @@ export function createModuleRuntime(deps: ModuleDeps) {
   return {
     store: deps.store,
     contexts,
+    /** Pushberichten langs ingeschakelde modules met een digest-haak; een fout in een module laat het bericht ongemoeid. */
+    async augmentDigest(kind: 'morning' | 'evening', message: DigestMessage | null, lang: 'nl' | 'en') {
+      let out = message;
+      for (const [id, server] of servers) {
+        if (!server.digest || !deps.store.isEnabled(id)) continue;
+        try {
+          out = await server.digest(contexts.get(id)!, kind, out, lang);
+        } catch (err) {
+          console.error(`[modules] digest van ${id} mislukt:`, err instanceof Error ? err.message : err);
+        }
+      }
+      return out;
+    },
     /** Achtergrondtaken starten (alleen vanuit server/index.ts, niet in tests). */
     start() {
       for (const [id, server] of servers) server.start?.(contexts.get(id)!);

@@ -40,6 +40,11 @@ export type ModuleManifest = {
   /** SVG-paden (24×24, lucide-stijl) zodat het icoon in het manifest zelf staat. */
   icon: string[];
   defaultEnabled: boolean;
+  /**
+   * Mag de module bij de eerste keer openen per dag het scherm overnemen (bijv. een ochtendritueel)?
+   * De app vraagt dan `GET /api/modules/<id>/startup` → `{ open: boolean }` en navigeert alleen bij `true`.
+   */
+  startup?: boolean;
   settings?: SettingDef[];
   /** Env-variabelen die de module leest (alleen ter documentatie in de UI; waarden blijven op de server). */
   env?: { name: string; secret?: boolean; description: Localized }[];
