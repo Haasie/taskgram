@@ -253,10 +253,10 @@ describe('dagplanning: afvinken', () => {
     expect(view.today.map((t: any) => t.id)).toEqual([id(2)]);
     expect(view.suggested).toEqual([id(2)]);
     expect(view.planned.map((t: any) => t.id)).toEqual([id(2)]);
-    // Daarna plannen met de afgeronde taak erbij laat hem er stilletjes uit; er gaat niets mis.
+    // Daarna plannen met de vandaag afgeronde taak erbij: hij komt in het plan en telt 's avonds als af.
     const saved = await call('PUT', '/day', { date: DAY, planned: [id(1), id(2)], workMode: 'normal' });
     expect(saved.status).toBe(200);
-    expect(saved.json.plan.planned).toEqual([id(2)]);
+    expect(saved.json.plan.planned).toEqual([id(1), id(2)]);
   });
 
   it('herhalende taak: de afgeronde rij en de opvolger zijn twee aparte taken, elk één keer', async () => {
@@ -292,10 +292,31 @@ describe('dagplanning: schatten', () => {
     expect(store.get(id(2))!.metadata.estimate_min).toBeUndefined();
   });
 
-  it('valt terug op de regel als de AI faalt of ontbreekt', async () => {
-    const { call, store } = setup([task(1, 'Erik bellen')], { estimator: async () => null });
+  it('zonder AI schrijft de regel de schatting weg', async () => {
+    const { call, store } = setup([task(1, 'Erik bellen')]);
     expect((await call('POST', '/estimate', { date: DAY })).json).toEqual({ estimated: 1, source: 'rule' });
     expect(store.get(id(1))!.metadata).toMatchObject({ estimate_min: 15, estimate_source: 'rule' });
+  });
+
+  it('een mislukte AI-ronde schrijft niets weg en probeert het pas na de afkoeltijd opnieuw', async () => {
+    const estimator = vi.fn(async (): Promise<number[] | null> => null);
+    const { call, store } = setup([task(1, 'Erik bellen')], { estimator });
+    expect((await call('POST', '/estimate', { date: DAY })).json).toEqual({ estimated: 0, source: null });
+    expect(store.get(id(1))!.metadata.estimate_min).toBeUndefined();
+    // De regel geldt wel bij het tonen, en de taak telt nog als 'mist een schatting'.
+    const view = (await call('GET', `/day?date=${DAY}`)).json;
+    expect(view.missingEstimates).toBe(1);
+    await call('POST', '/estimate', { date: DAY });
+    expect(estimator).toHaveBeenCalledTimes(1);
+  });
+
+  it('een weggeschreven regel-schatting van een eerdere mislukte ronde krijgt alsnog een AI-schatting', async () => {
+    const estimator = vi.fn(async (titles: string[]) => titles.map(() => 90));
+    const { call, store } = setup([task(1, 'Rapport schrijven', { metadata: { estimate_min: 45, estimate_source: 'rule' } }), task(2, 'Van mij', { metadata: { estimate_min: 30, estimate_source: 'user' } })], { estimator });
+    expect((await call('GET', `/day?date=${DAY}`)).json.missingEstimates).toBe(1);
+    expect((await call('POST', '/estimate', { date: DAY })).json).toEqual({ estimated: 1, source: 'ai' });
+    expect(store.get(id(1))!.metadata).toMatchObject({ estimate_min: 90, estimate_source: 'ai' });
+    expect(store.get(id(2))!.metadata).toMatchObject({ estimate_min: 30, estimate_source: 'user' });
   });
 
   it('feedback schuift de schatting een stap en maakt hem van jou', async () => {
@@ -365,5 +386,29 @@ describe('dagplanning: avond en push', () => {
     const { runtime, spies } = setup([], { enabled: false });
     expect(await runtime.augmentDigest('morning', null, 'nl')).toBeNull();
     expect(spies.listEntities).not.toHaveBeenCalled();
+  });
+});
+
+describe('dagplanning: afgevinkt vóór het vastleggen', () => {
+  it('een taak die vandaag al af is en in de selectie zit, komt in het plan en telt als af', async () => {
+    const { call, store } = setup([task(1, 'Al klaar', { metadata: { estimate_min: 60 } }), task(2, 'Nog open', { metadata: { estimate_min: 30 } })]);
+    const e = store.get(id(1))!;
+    e.status = 'done';
+    e.version += 1;
+    e.metadata = { ...e.metadata, completed_at: '2026-11-16T08:00:00Z' };
+    const saved = await call('PUT', '/day', { date: DAY, planned: [id(1), id(2)], workMode: 'normal' });
+    expect(saved.json.plan.planned).toEqual([id(1), id(2)]);
+    const view = (await call('GET', `/day?date=${DAY}`)).json;
+    expect(view.plan.done).toEqual([id(1)]);
+    expect(view.load.items.map((i: { id: string }) => i.id)).toEqual([id(2)]);
+  });
+
+  it('een taak die op een andere dag af kwam, komt niet in het plan', async () => {
+    const { call, store } = setup([task(1, 'Vorige week klaar'), task(2, 'Nog open')]);
+    const e = store.get(id(1))!;
+    e.status = 'done';
+    e.metadata = { ...e.metadata, completed_at: '2026-11-10T08:00:00Z' };
+    const saved = await call('PUT', '/day', { date: DAY, planned: [id(1), id(2)], workMode: 'normal' });
+    expect(saved.json.plan.planned).toEqual([id(2)]);
   });
 });

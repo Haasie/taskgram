@@ -132,6 +132,16 @@ export function estimateOf(t: Task): { min: number; source: EstimateSource } {
   return { min: ruleEstimate(t), source: 'rule' };
 }
 
+/**
+ * Moet deze taak nog een schatting krijgen? Zonder getal altijd. Met AI aan ook als er alleen een weggeschreven
+ * regel-schatting staat: die is een noodgreep van een eerdere mislukte AI-ronde, geen oordeel.
+ */
+export function needsEstimate(t: Task, ai: boolean): boolean {
+  const m = t.metadata.estimate_min;
+  if (typeof m !== 'number') return true;
+  return ai && t.metadata.estimate_source === 'rule';
+}
+
 /** Bijsturen met één tik: langer of korter dan gedacht. */
 export function adjustEstimate(min: number, verdict: 'longer' | 'shorter'): number {
   const idx = STEPS.indexOf(snap(min) as (typeof STEPS)[number]);
@@ -333,8 +343,10 @@ export function suggest(
     const agent = isAgentTask(t, s);
     const minutes = Math.round((agent ? s.agentAttentionMinutes : estimateOf(t).min) * factor);
     const b = bucketOf(t);
-    const forced = late(t, today) === 0;
-    if (agent && agents >= s.maxParallelAgents && !forced) continue;
+    // Te laat gaat voor (sortering), maar vult niet voorbij de capaciteit: met een achterstand zou elke dag
+    // overvol beginnen. Alleen de eerste te-late taak van een bak gaat altijd mee, ook als hij op zichzelf te groot is.
+    const forced = late(t, today) === 0 && used[b] === 0;
+    if (agent && agents >= s.maxParallelAgents) continue;
     if (!forced && used[b] + minutes > cap[b]) continue;
     used[b] += minutes;
     if (agent) agents += 1;
