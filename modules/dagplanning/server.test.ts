@@ -210,6 +210,77 @@ describe('dagplanning: opnieuw plannen', () => {
   });
 });
 
+describe('dagplanning: afvinken', () => {
+  const finish = (store: Map<string, RawEntity>, n: number, at = '2026-11-16T10:00:00Z') => {
+    const e = store.get(id(n))!;
+    e.status = 'done';
+    e.version += 1;
+    e.metadata = { ...e.metadata, completed_at: at };
+  };
+
+  it('een geplande taak die wordt afgevinkt blijft in het plan, telt als af en niet meer als belasting', async () => {
+    const { call, store } = setup([task(1, 'Klaar', { metadata: { estimate_min: 60 } }), task(2, 'Nog bezig', { metadata: { estimate_min: 30 } })]);
+    await call('PUT', '/day', { date: DAY, planned: [id(1), id(2)], workMode: 'normal' });
+    const before = (await call('GET', `/day?date=${DAY}`)).json;
+    finish(store, 1);
+    const after = (await call('GET', `/day?date=${DAY}`)).json;
+    expect(after.plan.planned).toEqual([id(1), id(2)]);
+    expect(after.plan.done).toEqual([id(1)]);
+    expect(after.planned.map((t: any) => [t.id, t.status])).toEqual([[id(1), 'done'], [id(2), 'next']]);
+    expect(after.today.map((t: any) => t.id)).toEqual([id(2)]);
+    expect(after.load.items.map((i: any) => i.id)).toEqual([id(2)]);
+    expect(after.load.buckets.work.load).toBeLessThan(before.load.buckets.work.load);
+  });
+
+  it('heropenen haalt de taak weer uit "af" en terug in de belasting', async () => {
+    const { call, store } = setup([task(1, 'Klaar', { metadata: { estimate_min: 60 } })]);
+    await call('PUT', '/day', { date: DAY, planned: [id(1)], workMode: 'normal' });
+    finish(store, 1);
+    expect((await call('GET', `/day?date=${DAY}`)).json.plan.done).toEqual([id(1)]);
+    store.get(id(1))!.status = 'next';
+    store.get(id(1))!.metadata = { ...store.get(id(1))!.metadata, completed_at: null };
+    const view = (await call('GET', `/day?date=${DAY}`)).json;
+    expect(view.plan.done).toEqual([]);
+    expect(view.today.map((t: any) => t.id)).toEqual([id(1)]);
+    expect(view.load.items.map((i: any) => i.id)).toEqual([id(1)]);
+  });
+
+  it('zonder opgeslagen plan maakt afvinken niets kapot: geen plan, de taak is gewoon weg uit de lijsten', async () => {
+    const { call, store } = setup([task(1, 'Klaar'), task(2, 'Nog bezig')]);
+    finish(store, 1);
+    const view = (await call('GET', `/day?date=${DAY}`)).json;
+    expect(view.plan).toBeNull();
+    expect(view.today.map((t: any) => t.id)).toEqual([id(2)]);
+    expect(view.suggested).toEqual([id(2)]);
+    expect(view.planned.map((t: any) => t.id)).toEqual([id(2)]);
+    // Daarna plannen met de afgeronde taak erbij laat hem er stilletjes uit; er gaat niets mis.
+    const saved = await call('PUT', '/day', { date: DAY, planned: [id(1), id(2)], workMode: 'normal' });
+    expect(saved.status).toBe(200);
+    expect(saved.json.plan.planned).toEqual([id(2)]);
+  });
+
+  it('herhalende taak: de afgeronde rij en de opvolger zijn twee aparte taken, elk één keer', async () => {
+    const { call, store } = setup([task(1, 'Wekelijks', { metadata: { estimate_min: 30 } })]);
+    await call('PUT', '/day', { date: DAY, planned: [id(1)], workMode: 'normal' });
+    finish(store, 1);
+    // Zoals de core-route: de opvolger start later, dus niet vandaag.
+    store.set(id(9), task(9, 'Wekelijks', { status: 'scheduled', metadata: { start_date: '2026-11-23', recurrence_parent_id: id(1) } }));
+    const view = (await call('GET', `/day?date=${DAY}`)).json;
+    expect(view.plan.done).toEqual([id(1)]);
+    expect(view.planned.map((t: any) => t.id)).toEqual([id(1)]);
+    const ids = [...view.leftovers, ...view.today, ...view.extra, ...view.planned].map((t: any) => t.id);
+    expect(ids).not.toContain(id(9));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('een taak die gisteren af kwam telt niet als af vandaag', async () => {
+    const { call, store } = setup([task(1, 'Klaar')]);
+    await call('PUT', '/day', { date: DAY, planned: [id(1)], workMode: 'normal' });
+    finish(store, 1, '2026-11-15T10:00:00Z');
+    expect((await call('GET', `/day?date=${DAY}`)).json.plan.done).toEqual([]);
+  });
+});
+
 describe('dagplanning: schatten', () => {
   it('AI vult ontbrekende schattingen in; alleen titels gaan mee', async () => {
     const estimator = vi.fn(async (titles: string[]) => titles.map(() => 45));

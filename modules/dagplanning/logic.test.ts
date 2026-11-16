@@ -15,6 +15,7 @@ import {
   slipCounts,
   snap,
   suggest,
+  withKept,
   type DayPlan
 } from './logic.js';
 
@@ -186,5 +187,26 @@ describe('agenda: afspraken nemen tijd', () => {
     expect(capacity(TODAY, 'normal', DEFAULT_SETTINGS, { work: 90, personal: 30 })).toEqual({ work: 210, personal: 60 });
     expect(capacity(TODAY, 'normal', DEFAULT_SETTINGS, { work: 900, personal: 900 })).toEqual({ work: 0, personal: 0 });
     expect(capacity(TODAY, 'off', DEFAULT_SETTINGS, { work: 60, personal: 0 })).toEqual({ work: 0, personal: 30 });
+  });
+});
+
+describe('afgevinkte rijen blijven zichtbaar', () => {
+  const row = (id: string, status = 'next') => ({ id, status });
+  const kept = (...items: { id: string; status: string }[]) => new Map(items.map((it) => [it.id, it]));
+
+  it('zet een afgeronde taak die uit de serverlijst viel terug, achteraan', () => {
+    const rows = withKept([row('a')], kept(row('b', 'done')), new Set(['a']));
+    expect(rows.map((r) => r.id)).toEqual(['a', 'b']);
+    expect(rows[1]!.status).toBe('done');
+  });
+
+  it('toont niets dubbel: de serverlijst wint, en een taak in een andere sectie telt als aanwezig', () => {
+    expect(withKept([row('a')], kept(row('a', 'done')), new Set(['a'])).map((r) => r.status)).toEqual(['next']);
+    expect(withKept([row('a')], kept(row('b', 'done')), new Set(['a', 'b'])).map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('zonder bewaarde rijen verandert er niets', () => {
+    const list = [row('a'), row('b')];
+    expect(withKept(list, new Map(), new Set(['a', 'b']))).toEqual(list);
   });
 });

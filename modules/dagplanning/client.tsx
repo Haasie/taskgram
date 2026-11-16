@@ -2,11 +2,12 @@ import '../_design';
 import './dagplanning.css';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError, request } from '../../src/lib/api';
-import { queryClient } from '../../src/lib/queries';
+import { api, ApiError, request } from '../../src/lib/api';
+import { completeTask, outboxEngine, queryClient, reopenTask, useTasks } from '../../src/lib/queries';
+import type { Task } from '../../shared/types';
 import type { ModuleViewProps } from '../types';
 import { useT } from './i18n';
-import { fmtMinutes, levelOf, type Bucket, type Level, type WorkMode } from './logic';
+import { fmtMinutes, levelOf, withKept, type Bucket, type Level, type WorkMode } from './logic';
 
 // Status altijd met vorm én woord, nooit alleen kleur.
 const MARK: Record<Level, string> = { room: '●', tight: '▲', over: '■' };
@@ -50,6 +51,60 @@ type Day = {
 };
 
 type I18n = ReturnType<typeof useT>;
+type Section = 'leftovers' | 'today' | 'extra';
+
+/** Afronden en heropenen via de mutaties van de core (optimistisch, met outbox en conflictafhandeling). */
+function useCompletion(date: string, i18n: I18n) {
+  const tasks = useTasks().data;
+  const cache = useMemo(() => new Map((tasks ?? []).map((t) => [t.id, t])), [tasks]);
+  const [error, setError] = useState<string | null>(null);
+  const dirty = useRef(false);
+
+  // Zodra de outbox leeg is (ook na een conflict of fout) de dag en takenlijsten opnieuw ophalen.
+  // Eerst de dag, dan de taken: anders valt een afgeronde rij heel even terug naar open.
+  useEffect(
+    () =>
+      outboxEngine.subscribe(() => {
+        if (!dirty.current || outboxEngine.pending().length > 0) return;
+        dirty.current = false;
+        void queryClient.invalidateQueries({ queryKey: dayKey(date) }).then(refreshTasks);
+      }),
+    [date]
+  );
+
+  const fail = (err: unknown) => setError(i18n.t('completeFailed', { error: err instanceof Error ? err.message : String(err) }));
+
+  // De cache van de core wint (die kent de optimistische stand); daarna wat de server in de dag meegaf.
+  const isDone = (it: Item, fallback = false) => {
+    const c = cache.get(it.id);
+    return c ? c.status === 'done' : it.status === 'done' || fallback;
+  };
+
+  const complete = (it: Item) => {
+    const task = cache.get(it.id);
+    if (!task) return fail(new Error('task not loaded'));
+    setError(null);
+    dirty.current = true;
+    completeTask(task).catch(fail);
+  };
+
+  const reopen = async (it: Item) => {
+    setError(null);
+    try {
+      // Afgeronde taken staan niet in de takenlijst van de core; haal hem op zodat de core hem kan heropenen.
+      if (!cache.has(it.id)) {
+        const fetched: Task = await api.getTask(it.id);
+        queryClient.setQueryData<Task[]>(['tasks'], (old) => [fetched, ...(old ?? []).filter((t) => t.id !== fetched.id)]);
+      }
+      dirty.current = true;
+      await reopenTask(it.id);
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  return { isDone, complete, reopen, error };
+}
 
 const dayKey = (date: string) => ['module', 'dagplanning', 'day', date] as const;
 const refreshTasks = () => void queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -114,6 +169,9 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
   const [showExtra, setShowExtra] = useState(false);
   const [askOver, setAskOver] = useState(false);
   const [result, setResult] = useState<{ failed: number } | null>(null);
+  const done = useCompletion(day.date, i18n);
+  // Afgevinkte rijen blijven zichtbaar, ook als de server ze niet meer als open taak teruggeeft.
+  const [kept, setKept] = useState<Map<string, { item: Item; section: Section }>>(() => new Map());
 
   // Ontbrekende schattingen één keer invullen bij openen; daarna de dag opnieuw ophalen.
   const estimated = useRef(false);
@@ -138,7 +196,7 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
 
   const minutes = (it: Item) => Math.round((it.agent ? day.settings.agentAttentionMinutes : it.estimate) * day.factor.factor);
   const cap = day.settings.capacity[mode];
-  const chosen = [...picked].map((id) => all.get(id)).filter((it): it is Item => !!it && it.status !== 'done');
+  const chosen = [...picked].map((id) => all.get(id)).filter((it): it is Item => !!it && !done.isDone(it));
   const loads = (['work', 'personal'] as const).map((b) => {
     const load = chosen.filter((it) => it.bucket === b).reduce((n, it) => n + minutes(it), 0);
     return { bucket: b, load, cap: cap[b], level: levelOf(load, cap[b]) };
@@ -194,7 +252,36 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
     );
   }
 
-  const leftovers = day.leftovers.filter((it) => it.status !== 'done');
+  const present = new Set([...day.leftovers, ...day.today, ...day.extra].map((it) => it.id));
+  const keptIn = (section: Section) => new Map([...kept].filter(([, v]) => v.section === section).map(([id, v]) => [id, v.item]));
+  // Na opnieuw openen: wat vandaag al af was en in het plan staat, staat niet meer in de lijsten van de server.
+  const plannedDone = new Map(day.planned.filter((it) => it.status === 'done').map((it) => [it.id, it]));
+  const rows: Record<Section, Item[]> = {
+    leftovers: withKept(day.leftovers, keptIn('leftovers'), present),
+    today: withKept(withKept(day.today, keptIn('today'), present), plannedDone, new Set([...present, ...kept.keys()])),
+    extra: withKept(day.extra, keptIn('extra'), present)
+  };
+  const leftovers = rows.leftovers.filter((it) => !done.isDone(it));
+  const finish = (it: Item, section: Section) => {
+    setKept((prev) => new Map(prev).set(it.id, { item: { ...it, status: 'done' }, section }));
+    done.complete(it);
+  };
+  const rowOf = (it: Item, section: Section, extra?: React.ReactNode) => (
+    <Row
+      key={it.id}
+      it={it}
+      done={done.isDone(it)}
+      picked={picked.has(it.id)}
+      toggle={toggle}
+      minutes={minutes(it)}
+      attention={day.settings.agentAttentionMinutes}
+      onComplete={() => finish(it, section)}
+      onReopen={() => void done.reopen(it)}
+      i18n={i18n}
+    >
+      {extra}
+    </Row>
+  );
 
   return (
     <main className="ld-main">
@@ -222,7 +309,7 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
 
       <AgendaBlock day={day} i18n={i18n} />
 
-      {leftovers.length > 0 && (
+      {rows.leftovers.length > 0 && (
         <section className="ld-section">
           <div className="ld-sh">
             <h2>{t('leftoverH')}</h2>
@@ -239,37 +326,39 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
           </div>
           <p className="ld-meta">{t('leftoverLede')}</p>
           <ul className="ld-list">
-            {leftovers.map((it) => (
-              <li key={it.id} className="ld-item dp-item">
-                <Pick it={it} on={picked.has(it.id)} toggle={toggle} i18n={i18n} />
-                <Info it={it} minutes={minutes(it)} i18n={i18n} attention={day.settings.agentAttentionMinutes} />
-                <div className="ld-acts">
-                  {(['later', 'someday'] as const).map((to) => (
-                    <button
-                      key={to}
-                      type="button"
-                      className="ld-chip ld-all"
-                      aria-pressed={moves[it.id] === to}
-                      onClick={() => {
-                        setMoves((prev) => {
-                          const next = { ...prev };
-                          if (next[it.id] === to) delete next[it.id];
-                          else next[it.id] = to;
-                          return next;
-                        });
-                        setPicked((prev) => {
-                          const next = new Set(prev);
-                          next.delete(it.id);
-                          return next;
-                        });
-                      }}
-                    >
-                      {t(`move_${to}`)}
-                    </button>
-                  ))}
-                </div>
-              </li>
-            ))}
+            {rows.leftovers.map((it) =>
+              rowOf(
+                it,
+                'leftovers',
+                done.isDone(it) ? null : (
+                  <>
+                    {(['later', 'someday'] as const).map((to) => (
+                      <button
+                        key={to}
+                        type="button"
+                        className="ld-chip ld-all"
+                        aria-pressed={moves[it.id] === to}
+                        onClick={() => {
+                          setMoves((prev) => {
+                            const next = { ...prev };
+                            if (next[it.id] === to) delete next[it.id];
+                            else next[it.id] = to;
+                            return next;
+                          });
+                          setPicked((prev) => {
+                            const next = new Set(prev);
+                            next.delete(it.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        {t(`move_${to}`)}
+                      </button>
+                    ))}
+                  </>
+                )
+              )
+            )}
           </ul>
         </section>
       )}
@@ -279,41 +368,25 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
           <h2>{t('todayH')}</h2>
         </div>
         <p className="ld-meta">{t('todayLede')}</p>
-        {day.today.length === 0 ? (
+        {rows.today.length === 0 ? (
           <div className="ld-empty">{t('empty')}</div>
         ) : (
-          <ul className="ld-list">
-            {day.today.map((it) => (
-              <li key={it.id} className="ld-item dp-item">
-                <Pick it={it} on={picked.has(it.id)} toggle={toggle} i18n={i18n} />
-                <Info it={it} minutes={minutes(it)} i18n={i18n} attention={day.settings.agentAttentionMinutes} />
-                <span />
-              </li>
-            ))}
-          </ul>
+          <ul className="ld-list">{rows.today.map((it) => rowOf(it, 'today'))}</ul>
         )}
       </section>
 
-      {day.extra.length > 0 && (
+      {rows.extra.length > 0 && (
         <section className="ld-section">
           <div className="ld-sh">
             <h2>{t('extraH')}</h2>
             <button type="button" className="ld-btn ld-sec ld-sm" aria-expanded={showExtra} onClick={() => setShowExtra((v) => !v)}>
-              {showExtra ? t('hideExtra') : t('showExtra', { n: day.extra.length })}
+              {showExtra ? t('hideExtra') : t('showExtra', { n: rows.extra.length })}
             </button>
           </div>
           {showExtra && (
             <>
               <p className="ld-meta">{t('extraLede')}</p>
-              <ul className="ld-list">
-                {day.extra.map((it) => (
-                  <li key={it.id} className="ld-item dp-item">
-                    <Pick it={it} on={picked.has(it.id)} toggle={toggle} i18n={i18n} />
-                    <Info it={it} minutes={minutes(it)} i18n={i18n} attention={day.settings.agentAttentionMinutes} />
-                    <span />
-                  </li>
-                ))}
-              </ul>
+              <ul className="ld-list">{rows.extra.map((it) => rowOf(it, 'extra'))}</ul>
             </>
           )}
         </section>
@@ -327,6 +400,11 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
       )}
 
       <div className="dp-foot">
+        {done.error && (
+          <p className="ld-meta ld-error" role="alert">
+            {done.error}
+          </p>
+        )}
         {askOver ? (
           <div className="ld-confirm" role="alertdialog" aria-label={t('overAsk')}>
             <span>
@@ -435,17 +513,59 @@ function Pick({ it, on, toggle, i18n }: { it: Item; on: boolean; toggle: (id: st
   );
 }
 
-function Info({ it, minutes, attention, i18n }: { it: Item; minutes: number; attention: number; i18n: I18n }) {
+/** Afronden en ongedaan maken: een eigen knop met woord en raakvlak van minstens 44 px, los van de selectie. */
+function CompleteButton({ it, done, onComplete, onReopen, i18n }: { it: Item; done: boolean; onComplete: () => void; onReopen: () => void; i18n: I18n }) {
+  const { t } = i18n;
+  return done ? (
+    <button type="button" className="ld-btn ld-sec dp-act dp-reopen" aria-label={t('reopen', { title: it.title })} onClick={onReopen}>
+      <span aria-hidden="true">↺ </span>
+      {t('reopenWord')}
+    </button>
+  ) : (
+    <button type="button" className="ld-btn dp-act dp-complete" aria-label={t('complete', { title: it.title })} onClick={onComplete}>
+      <span aria-hidden="true">✓ </span>
+      {t('completeWord')}
+    </button>
+  );
+}
+
+/** Eén taakrij in het ochtendscherm: selecteren (checkbox) en afronden (knop) zijn bewust verschillende bedieningen. */
+function Row({
+  it, done, picked, toggle, minutes, attention, onComplete, onReopen, i18n, children
+}: {
+  it: Item; done: boolean; picked: boolean; toggle: (id: string) => void; minutes: number; attention: number;
+  onComplete: () => void; onReopen: () => void; i18n: I18n; children?: React.ReactNode;
+}) {
+  return (
+    <li className={`ld-item dp-item ${done ? 'dp-isdone' : ''}`}>
+      {done ? (
+        <span className="dp-tick" aria-hidden="true">
+          ✓
+        </span>
+      ) : (
+        <Pick it={it} on={picked} toggle={toggle} i18n={i18n} />
+      )}
+      <Info it={it} done={done} minutes={minutes} i18n={i18n} attention={attention} />
+      <div className="ld-acts">
+        {children}
+        <CompleteButton it={it} done={done} onComplete={onComplete} onReopen={onReopen} i18n={i18n} />
+      </div>
+    </li>
+  );
+}
+
+function Info({ it, done = false, minutes, attention, i18n }: { it: Item; done?: boolean; minutes: number; attention: number; i18n: I18n }) {
   const { t, lang } = i18n;
   return (
     <div className="ld-t">
-      <span className="ld-title-static">{it.title || '…'}</span>
+      <span className={`ld-title-static ${done ? 'dp-struck' : ''}`}>{it.title || '…'}</span>
       <div className="ld-meta">
+        {done && <span className="dp-donetag">✓ {t('doneTag')}</span>}
         <span className="ld-data">±{fmtMinutes(minutes, lang)}</span>
         <span className="dp-src"> · {t(`est_${it.source}`)}</span>
         <span> · {t(`bucket_${it.bucket}`)}</span>
         {it.agent && <span className="dp-agent">{t('agentBadge', { min: fmtMinutes(attention, lang) })}</span>}
-        {it.deadline && it.deadline < new Date().toISOString().slice(0, 10) && <span className="ld-flag">{t('late')}</span>}
+        {!done && it.deadline && it.deadline < new Date().toISOString().slice(0, 10) && <span className="ld-flag">{t('late')}</span>}
         {it.split && <span className="ld-flag">{t('split', { n: it.slips })}</span>}
       </div>
     </div>
@@ -459,6 +579,7 @@ function Evening({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => vo
   const [moves, setMoves] = useState<Record<string, Move>>({});
   const [feedback, setFeedback] = useState<Record<string, 'longer' | 'shorter'>>({});
   const [closed, setClosed] = useState(false);
+  const completion = useCompletion(day.date, i18n);
 
   const give = useMutation({
     mutationFn: (v: { id: string; verdict: 'longer' | 'shorter' }) => request('POST', '/modules/dagplanning/feedback', v),
@@ -500,8 +621,9 @@ function Evening({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => vo
   }
 
   const doneSet = new Set(day.plan.done);
-  const done = day.planned.filter((it) => doneSet.has(it.id) || it.status === 'done');
-  const open = day.planned.filter((it) => !doneSet.has(it.id) && it.status !== 'done');
+  const isDone = (it: Item) => completion.isDone(it, doneSet.has(it.id));
+  const done = day.planned.filter(isDone);
+  const open = day.planned.filter((it) => !isDone(it));
 
   return (
     <main className="ld-main">
@@ -519,7 +641,10 @@ function Evening({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => vo
                 <span className="dp-tick" aria-hidden="true">
                   ✓
                 </span>
-                <span className="ld-title-static">{it.title}</span>
+                <span className="ld-title-static dp-struck">
+                  {it.title}
+                  <span className="dp-donetag"> ✓ {t('doneTag')}</span>
+                </span>
                 <div className="ld-acts">
                   {feedback[it.id] ? (
                     <span className="ld-meta">{t('thanks')}</span>
@@ -530,6 +655,7 @@ function Evening({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => vo
                       </button>
                     ))
                   )}
+                  <CompleteButton it={it} done onComplete={() => completion.complete(it)} onReopen={() => void completion.reopen(it)} i18n={i18n} />
                 </div>
               </li>
             ))}
@@ -550,6 +676,7 @@ function Evening({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => vo
                 </span>
                 <span className="ld-title-static">{it.title}</span>
                 <div className="ld-acts">
+                  <CompleteButton it={it} done={false} onComplete={() => completion.complete(it)} onReopen={() => void completion.reopen(it)} i18n={i18n} />
                   {(['tomorrow', 'later', 'someday'] as const).map((to) => (
                     <button
                       key={to}
@@ -575,6 +702,11 @@ function Evening({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => vo
         </section>
       )}
       <div className="dp-foot">
+        {completion.error && (
+          <p className="ld-meta ld-error" role="alert">
+            {completion.error}
+          </p>
+        )}
         <button type="button" className="ld-btn" disabled={close.isPending} onClick={() => close.mutate()}>
           {close.isPending ? t('closing') : t('close')}
         </button>

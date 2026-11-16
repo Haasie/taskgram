@@ -350,3 +350,13 @@ export const fmtMinutes = (min: number, lang: 'nl' | 'en' = 'nl') => {
   const m = min % 60;
   return m ? `${h}${hour} ${m}m` : `${h}${hour}`;
 };
+
+/**
+ * Rijen van een sectie na afvinken. Een afgeronde taak valt uit de lijsten van de server (die toont alleen open
+ * taken); de client bewaart hem daarom en zet hem terug op dezelfde plek, zodat hij als "af" zichtbaar blijft en
+ * ongedaan gemaakt kan worden. Wat de server al in een lijst heeft staan, wint; elke taak komt één keer voor.
+ */
+export function withKept<T extends { id: string }>(list: T[], kept: ReadonlyMap<string, T>, present: ReadonlySet<string>): T[] {
+  const own = new Set(list.map((it) => it.id));
+  return [...list, ...[...kept.values()].filter((it) => !own.has(it.id) && !present.has(it.id))];
+}
