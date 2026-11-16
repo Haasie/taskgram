@@ -23,6 +23,7 @@ import {
   estimateOf,
   isAgentTask,
   loadOf,
+  needsEstimate,
   readSettings,
   slipCounts,
   SLIP_SPLIT,
@@ -53,7 +54,10 @@ const closeBody = z.object({ date, moves: z.array(move).max(60).default([]) }).s
 const feedbackBody = z.object({ id: uuid, verdict: z.enum(['longer', 'shorter']) }).strict();
 const estimateBody = z.object({ date }).strict();
 
-type State = { estimator?: Estimator | null };
+type State = { estimator?: Estimator | null; aiFailedAt?: number };
+
+/** Na een mislukte AI-ronde (rate limit, storing) even niet opnieuw proberen. */
+const AI_COOLDOWN_MS = 10 * 60_000;
 
 const settingsOf = (ctx: ModuleContext): Settings & { aiEstimates: boolean; autoOpen: boolean } => {
   const raw = ctx.settings();
@@ -224,7 +228,7 @@ async function dayView(ctx: ModuleContext, day: string) {
       capacity: { normal: capacity(day, 'normal', s, agenda.busy), busy: capacity(day, 'busy', s, agenda.busy), off: capacity(day, 'off', s, agenda.busy) }
     },
     ai: s.aiEstimates && estimatorOf(ctx) !== null,
-    missingEstimates: pool.filter((t) => typeof t.metadata.estimate_min !== 'number').length,
+    missingEstimates: pool.filter((t) => !isAgentTask(t, s) && needsEstimate(t, s.aiEstimates && estimatorOf(ctx) !== null)).length,
     leftovers: view(cand.leftovers),
     today: view([...cand.today, ...extraPlanned]),
     extra: view(cand.extra),
@@ -259,15 +263,22 @@ export function routes(ctx: ModuleContext) {
     const [tasks, plans] = await Promise.all([openTasks(ctx), loadPlans(ctx)]);
     const previous = plans.filter((p) => p.date < body.date).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
     const cand = candidates(tasks, body.date, previous);
+    const state = ctx.state as State;
+    const estimator = s.aiEstimates ? estimatorOf(ctx) : null;
     const missing = [...cand.leftovers, ...cand.today, ...cand.extra]
-      .filter((t) => typeof t.metadata.estimate_min !== 'number' && !isAgentTask(t, s))
+      .filter((t) => !isAgentTask(t, s) && needsEstimate(t, estimator !== null))
       .slice(0, MAX_BATCH);
     if (missing.length === 0) return c.json({ estimated: 0, source: null });
-    const estimator = s.aiEstimates ? estimatorOf(ctx) : null;
-    const ai = estimator ? await estimator(missing.map((t) => titleOf(t))) : null;
+    const cooling = estimator !== null && Date.now() - (state.aiFailedAt ?? 0) < AI_COOLDOWN_MS;
+    const ai = estimator && !cooling ? await estimator(missing.map((t) => titleOf(t))) : null;
+    if (estimator && !cooling) state.aiFailedAt = ai ? undefined : Date.now();
+    // AI aan maar niet gelukt: niets wegschrijven. De regel geldt dan alleen bij het tonen, zodat de volgende
+    // ronde het opnieuw kan proberen in plaats van dat de noodgreep blijft staan.
+    if (estimator && !ai) return c.json({ estimated: 0, source: null });
     let estimated = 0;
     for (const [i, t] of missing.entries()) {
       const fromAi = ai?.[i] ?? 0;
+      if (ai && fromAi <= 0) continue;
       const min = fromAi > 0 ? fromAi : estimateOf(t).min;
       try {
         await ctx.pg.updateTask(t.id, { version: t.version, metadata: { estimate_min: min, estimate_source: fromAi > 0 ? 'ai' : 'rule' } });
@@ -289,14 +300,26 @@ export function routes(ctx: ModuleContext) {
     const existing = plans.find((p) => p.date === body.date);
     // Opnieuw plannen later op de dag: wat al gepland stond en inmiddels af is, blijft in het plan (telt als af).
     const keep = new Set(existing?.planned ?? []);
-    const planned = [...new Set(body.planned)].filter((id) => byId.has(id) || keep.has(id));
+    // Ook wat vandaag al is afgevinkt vóór het vastleggen hoort in het plan: anders telt het 's avonds niet als af.
+    const wanted = [...new Set(body.planned)];
+    const doneToday = new Map<string, Task>();
+    if (wanted.some((id) => !byId.has(id) && !keep.has(id))) {
+      for (const t of (await ctx.pg.listTasks('done')).map(toTask)) {
+        if (completionDayInZone(t, ctx.timeZone) === body.date) doneToday.set(t.id, t);
+      }
+    }
+    const planned = wanted.filter((id) => byId.has(id) || keep.has(id) || doneToday.has(id));
     const factor = correctionFactor(plans.filter((p) => p.date < body.date), s);
     const plannedTasks = planned.map((id) => byId.get(id)).filter((t): t is Task => !!t);
     const load = loadOf(plannedTasks, body.date, body.workMode, factor.factor, s, agenda.busy);
     if (load.over && !body.ackOver) {
       return c.json({ error: { code: 'OVERCOMMITTED', message: 'Plan is fuller than your usual day' }, load }, 409);
     }
-    const est = { ...(existing?.est ?? {}), ...Object.fromEntries(load.items.map((i) => [i.id, i.raw])) };
+    const est: Record<string, number> = {
+      ...(existing?.est ?? {}),
+      ...Object.fromEntries(planned.filter((id) => doneToday.has(id)).map((id) => [id, estimateOf(doneToday.get(id) as Task).min])),
+      ...Object.fromEntries(load.items.map((i) => [i.id, i.raw]))
+    };
     for (const k of Object.keys(est)) if (!planned.includes(k)) delete est[k];
     const plan = await savePlan(ctx, {
       id: existing?.id,
