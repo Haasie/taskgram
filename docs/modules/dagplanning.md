@@ -50,6 +50,15 @@ Only personal feeds belong here. Your work calendar is never read.
 
 Planned tasks that were not on Today yet are moved there.
 
+**Completing from the rituals.** Every task row has two separate controls: the checkbox *selects* the task for the
+plan, the **✓ Complete** button *finishes* it (right-hand side, at least 44×44 px, with its own label
+*Complete: <title>*). Completing uses Taskgram's normal completion (optimistic, offline-safe; a version conflict
+keeps the Postgram version and shows the usual notice). The row stays visible, struck through with *✓ done*, no
+longer counts towards the meters, and **↺ Undo** reopens it. A planned task you complete stays in the plan and counts as
+done in the evening; without a saved plan nothing changes besides the task itself. A recurring task behaves as in the
+lists: the next occurrence is created and appears on its own date, so the finished row and its successor are two
+separate tasks.
+
 **Evening** (opened by the evening push)
 
 - What got done, with an optional *took longer* / *was quicker* per task (shifts that task's estimate one step and marks it as yours).

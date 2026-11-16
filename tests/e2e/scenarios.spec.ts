@@ -729,6 +729,36 @@ test('E27: Cockpit toont features per fase, risico’s in woorden en een hervat-
   }
 });
 
+test('E29: Dagplanning: een taak afvinken blijft als "af" zichtbaar en is te heropenen @mobile', async ({ page }) => {
+  const toggle = async (enabled: boolean) =>
+    expect((await page.request.put('/api/modules/dagplanning', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } })).ok()).toBe(true);
+  const statusOf = async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.OVERDUE_TASK)?.status;
+  await toggle(true);
+  try {
+    await page.goto('/#/dagplanning');
+    await expect(page.getByRole('heading', { name: 'Dagplanning' })).toBeVisible();
+
+    // Selecteren (checkbox) en afronden (knop) zijn twee verschillende bedieningen.
+    await expect(page.getByRole('checkbox', { name: 'Plannen: Achterstallige taak' })).toBeVisible();
+    const complete = page.getByRole('button', { name: 'Afronden: Achterstallige taak' });
+    const box = await complete.boundingBox();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await complete.click();
+
+    const row = page.getByRole('listitem').filter({ hasText: 'Achterstallige taak' });
+    await expect(row).toContainText('af');
+    await expect(row.getByRole('checkbox')).toHaveCount(0);
+    await expect.poll(statusOf).toBe('done');
+
+    await row.getByRole('button', { name: 'Heropenen: Achterstallige taak' }).click();
+    await expect(page.getByRole('checkbox', { name: 'Plannen: Achterstallige taak' })).toBeVisible();
+    await expect.poll(statusOf).toBe('next');
+  } finally {
+    await toggle(false);
+  }
+});
+
 test('E28: Dagplanning opent het ochtendritueel, toont capaciteit in woorden en sluit de dag af @mobile', async ({ page }) => {
   const toggle = async (enabled: boolean) =>
     expect((await page.request.put('/api/modules/dagplanning', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } })).ok()).toBe(true);

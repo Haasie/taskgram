@@ -2,6 +2,11 @@
 .dp .dp-item { grid-template-columns: auto minmax(0, 1fr) auto; }
 .dp .dp-check { width: 20px; height: 20px; accent-color: var(--gov); margin: 0 4px; }
 .dp .dp-tick { font: 600 16px/20px var(--mono); min-width: 20px; text-align: center; color: var(--gov); }
+.dp .dp-struck { text-decoration: line-through; color: var(--ink-muted); }
+.dp .dp-isdone .ld-meta { color: var(--ink-muted); }
+.dp .dp-donetag { font: 600 11px/16px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--gov); margin-right: 8px; text-decoration: none; display: inline-block; }
+/* Afronden is een knop met woord, geen vinkvak: selecteren (plannen) en afronden mogen niet op elkaar lijken. */
+.dp .dp-act { min-height: 44px; min-width: 44px; padding: 8px 14px; font-size: 12px; white-space: nowrap; }
 .dp .dp-src { color: var(--ink-faint); }
 .dp .dp-agent {
   margin-left: 8px; padding: 1px 5px; border: 1.5px solid var(--gov); color: var(--gov);
