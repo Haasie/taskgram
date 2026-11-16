@@ -325,7 +325,7 @@ export function candidates(tasks: Task[], today: string, previous: DayPlan | nul
 
 /**
  * Voorselectie: eerst wat al op Vandaag staat (op urgentie), zolang het binnen de capaciteit past.
- * Taken met een verlopen deadline gaan altijd mee. Gisteren-gemist kies je zelf: dat voelt anders dan opnieuw krijgen.
+ * Te laat gaat voor in de volgorde; alleen de eerste te-late taak per bak gaat altijd mee. Gisteren-gemist kies je zelf: dat voelt anders dan opnieuw krijgen.
  */
 export function suggest(
   tasks: Task[],
