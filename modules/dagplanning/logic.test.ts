@@ -137,7 +137,15 @@ describe('capaciteit en belasting', () => {
 });
 
 describe('voorstel voor de ochtend', () => {
-  it('kiest op urgentie tot de capaciteit vol is; te laat gaat altijd mee', () => {
+  it('een achterstand vult niet voorbij de capaciteit: te laat gaat voor, de rest blijft ongekozen', () => {
+    const s = readSettings({ workMinutes: 120 });
+    const late = [1, 2, 3, 4].map((n) => task(`Te laat ${n}`, { metadata: { due_date: '2026-11-10', estimate_min: 45, sort_order: n } }));
+    const fresh = task('Nieuw en belangrijk', { metadata: { priority: 5, estimate_min: 30 } });
+    const picked = suggest([fresh, ...late], TODAY, 'normal', 1, s);
+    expect(picked).toEqual([late[0]!.id, late[1]!.id, fresh.id]);
+  });
+
+  it('kiest op urgentie tot de capaciteit vol is; de eerste te-late taak gaat altijd mee', () => {
     const s = readSettings({ workMinutes: 120 });
     const late = task('Iets dat te laat is', { metadata: { due_date: '2026-11-10', estimate_min: 240 } });
     const high = task('Belangrijk bouwen', { metadata: { priority: 5, estimate_min: 90 } });
