@@ -319,6 +319,21 @@ describe('dagplanning: schatten', () => {
     expect(store.get(id(2))!.metadata).toMatchObject({ estimate_min: 30, estimate_source: 'user' });
   });
 
+  it('de schatter probeert het na een 429 één keer opnieuw en geeft daarna pas op', async () => {
+    const ok = () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ estimates: [{ n: 1, minutes: 30 }] }) } }] }), { status: 200 });
+    const busy = () => new Response(JSON.stringify({ type: 'service_tier_capacity_exceeded', message: 'niet loggen' }), { status: 429 });
+    const once = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(ok());
+    expect(await createEstimator({ MISTRAL_API_KEY: 'k' }, once as unknown as typeof fetch, 0)!(['Een'])).toEqual([30]);
+    expect(once).toHaveBeenCalledTimes(2);
+
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const twice = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(busy());
+    expect(await createEstimator({ MISTRAL_API_KEY: 'k' }, twice as unknown as typeof fetch, 0)!(['Een'])).toBeNull();
+    expect(twice).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledWith('[dagplanning] schatten mislukt: HTTP 429 (service_tier_capacity_exceeded)');
+    log.mockRestore();
+  });
+
   it('feedback schuift de schatting een stap en maakt hem van jou', async () => {
     const { call, store } = setup([task(1, 'Rapport reviewen', { metadata: { estimate_min: 30 } })]);
     expect((await call('POST', '/feedback', { id: id(1), verdict: 'longer' })).json).toEqual({ estimate: 45 });

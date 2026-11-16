@@ -234,6 +234,7 @@ export const nl = {
 
   // Settings
   'settings.title': 'Instellingen',
+  'settings.version': 'Versie',
   'settings.close': 'Sluiten',
   'settings.language': 'Taal / Language',
   'settings.langNl': 'Nederlands',

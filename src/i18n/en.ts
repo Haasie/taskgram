@@ -236,6 +236,7 @@ export const en: Record<keyof typeof nl, string> = {
 
   // Settings
   'settings.title': 'Settings',
+  'settings.version': 'Version',
   'settings.close': 'Close',
   'settings.language': 'Language / Taal',
   'settings.langNl': 'Nederlands',

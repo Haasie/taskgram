@@ -59,6 +59,14 @@ describe('auth', () => {
   it('keeps the health check public', async () => {
     expect((await app.request('/healthz')).status).toBe(200);
   });
+
+  it('shows which build is running on /health, without auth', async () => {
+    const res = await app.request('/health');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'ok', commit: null, core: null });
+    const versioned = createApp({ ...config, version: { commit: 'abc1234', core: 'def5678' } }, pg);
+    expect(await (await versioned.request('/health')).json()).toEqual({ status: 'ok', commit: 'abc1234', core: 'def5678' });
+  });
 });
 
 describe('cache-control (H9)', () => {
