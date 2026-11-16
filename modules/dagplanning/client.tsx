@@ -72,7 +72,8 @@ function useCompletion(date: string, i18n: I18n) {
     [date]
   );
 
-  const fail = (err: unknown) => setError(i18n.t('completeFailed', { error: err instanceof Error ? err.message : String(err) }));
+  // Geen ruwe fouttekst in beeld: die kan adressen of interne details bevatten.
+  const fail = () => setError(i18n.t('completeFailed'));
 
   // De cache van de core wint (die kent de optimistische stand); daarna wat de server in de dag meegaf.
   const isDone = (it: Item, fallback = false) => {
@@ -82,7 +83,7 @@ function useCompletion(date: string, i18n: I18n) {
 
   const complete = (it: Item) => {
     const task = cache.get(it.id);
-    if (!task) return fail(new Error('task not loaded'));
+    if (!task) return fail();
     setError(null);
     dirty.current = true;
     completeTask(task).catch(fail);
@@ -98,8 +99,8 @@ function useCompletion(date: string, i18n: I18n) {
       }
       dirty.current = true;
       await reopenTask(it.id);
-    } catch (err) {
-      fail(err);
+    } catch {
+      fail();
     }
   };
 
@@ -116,8 +117,12 @@ export default function DagplanningView({ today }: ModuleViewProps) {
   const data = q.data;
   const [tab, setTab] = useState<'morning' | 'evening' | null>(null);
   // Standaard: avond zodra er een plan is en het na vieren is; anders ochtend.
-  const autoTab = data?.plan && !data.plan.closed && new Date().getHours() >= 16 ? 'evening' : 'morning';
-  const active = tab ?? autoTab;
+  // Eén keer bepaald bij het openen: wie na vieren zijn plan vastlegt, blijft in de ochtend en ziet de bevestiging.
+  const autoTab = useRef<'morning' | 'evening' | null>(null);
+  if (data && autoTab.current === null) {
+    autoTab.current = data.plan && !data.plan.closed && new Date().getHours() >= 16 ? 'evening' : 'morning';
+  }
+  const active = tab ?? autoTab.current ?? 'morning';
 
   return (
     <div className="ld dp">

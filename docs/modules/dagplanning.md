@@ -45,7 +45,7 @@ Only personal feeds belong here. Your work calendar is never read.
 2. Two meters, *Work* and *Personal*: planned load against available time, with a shape and a word —
    ● Room, ▲ Tight, ■ Overfull.
 3. *Left over from yesterday*: one button sends all of it to later, or choose per task. Choosing nothing leaves it where it is.
-4. *Today*: preselected; tick to plan. *Add?*: important or favourite tasks not on Today yet.
+4. *Today*: preselected up to your capacity, overdue first (an overdue backlog does not overfill the day); tick to plan. *Add?*: important or favourite tasks not on Today yet.
 5. *Lock in plan*. If a meter is overfull (or there are too many agents), the plan asks once: *on purpose?* After that it stays quiet.
 
 Planned tasks that were not on Today yet are moved there.
@@ -55,7 +55,7 @@ plan, the **✓ Complete** button *finishes* it (right-hand side, at least 44×4
 *Complete: <title>*). Completing uses Taskgram's normal completion (optimistic, offline-safe; a version conflict
 keeps the Postgram version and shows the usual notice). The row stays visible, struck through with *✓ done*, no
 longer counts towards the meters, and **↺ Undo** reopens it. A planned task you complete stays in the plan and counts as
-done in the evening; without a saved plan nothing changes besides the task itself. A recurring task behaves as in the
+done in the evening; completed before you lock in the plan, it still joins the plan if it was selected. A recurring task behaves as in the
 lists: the next occurrence is created and appears on its own date, so the finished row and its successor are two
 separate tasks.
 
@@ -72,7 +72,9 @@ up in the morning ritual without one. Values are snapped to 5, 10, 15, 30, 45, 6
 
 - **AI** (setting *AI estimates* on and `MISTRAL_API_KEY` set): only the **title (first line)** of each task is sent
   to Mistral (chat completions, JSON mode), never notes or checklists, in batches of up to 25. Model:
-  `DAGPLANNING_MODEL`, default `mistral-small-latest`. If the call fails or returns something unusable, the rule takes over.
+  `DAGPLANNING_MODEL`, default `mistral-small-latest`. If the call fails (rate limit, outage) nothing is stored: the
+  rule is shown for now and the next opening tries again, at most once per 10 minutes. A stored `rule` estimate is
+  replaced by an AI one as soon as AI works.
 - **Rule** (always available, nothing leaves the server): the kind of verb in the title (*call*, *mail* → 15 min;
   *review*, *check* → 30; *prepare*, *write*, meetings → 60; *build*, *deliver*, *migrate* → 120), plus 10 minutes per
   open checklist item.
