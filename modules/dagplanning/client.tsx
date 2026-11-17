@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError, request } from '../../src/lib/api';
 import { completeTask, outboxEngine, queryClient, reopenTask, useTasks } from '../../src/lib/queries';
+import { todayISO } from '../../shared/dates';
 import type { Task } from '../../shared/types';
 import type { ModuleViewProps } from '../types';
 import { useT } from './i18n';
@@ -570,7 +571,7 @@ function Info({ it, done = false, minutes, attention, i18n }: { it: Item; done?:
         <span className="dp-src"> · {t(`est_${it.source}`)}</span>
         <span> · {t(`bucket_${it.bucket}`)}</span>
         {it.agent && <span className="dp-agent">{t('agentBadge', { min: fmtMinutes(attention, lang) })}</span>}
-        {!done && it.deadline && it.deadline < new Date().toISOString().slice(0, 10) && <span className="ld-flag">{t('late')}</span>}
+        {!done && it.deadline && it.deadline < todayISO() && <span className="ld-flag">{t('late')}</span>}
         {it.split && <span className="ld-flag">{t('split', { n: it.slips })}</span>}
       </div>
     </div>
