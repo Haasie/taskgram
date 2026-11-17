@@ -773,6 +773,8 @@ test('E28: Dagplanning opent het ochtendritueel, toont capaciteit in woorden en 
     const werk = page.getByRole('meter', { name: 'Werk' });
     await expect(werk).toHaveAttribute('aria-valuetext', /^(Ruimte|Krap|Overvol): /);
     await expect(page.getByText(/Correctie ×1,?\.?5 \(start\)/)).toBeVisible();
+    // Welke schatter actief is staat in woorden op het scherm (de e2e-server heeft geen Mistral-sleutel).
+    await expect(page.getByTestId('ai-status')).toHaveText('Schatting: regel — geen Mistral-sleutel');
 
     await page.getByRole('button', { name: 'Plan vastleggen' }).click();
     const ask = page.getByRole('alertdialog');

@@ -37,6 +37,9 @@ type Day = {
   factor: { factor: number; days: number; learned: boolean };
   settings: { agentAttentionMinutes: number; maxParallelAgents: number; capacity: Record<WorkMode, Record<Bucket, number>> };
   ai: boolean;
+  aiStatus: 'on' | 'off-setting' | 'off-nokey' | 'cooling' | 'failed';
+  aiReason?: string;
+  aiRetryMin?: number;
   missingEstimates: number;
   leftovers: Item[];
   today: Item[];
@@ -183,8 +186,9 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
   const estimated = useRef(false);
   const estimate = useMutation({
     mutationFn: () => request<{ estimated: number }>('POST', '/modules/dagplanning/estimate', { date: day.date }),
-    onSuccess: (r) => {
-      if (r.estimated > 0) void queryClient.invalidateQueries({ queryKey: dayKey(day.date) });
+    onSuccess: () => {
+      // Ook zonder nieuwe schattingen: de statusregel (AI gefaald / afkoelen) komt uit de dagweergave.
+      void queryClient.invalidateQueries({ queryKey: dayKey(day.date) });
     }
   });
   useEffect(() => {
@@ -310,6 +314,9 @@ function Morning({ day, i18n }: { day: Day; i18n: I18n }) {
         <p className="ld-meta">
           {t(day.factor.learned ? 'factorLearned' : 'factorStart', { f: day.factor.factor.toLocaleString(i18n.locale), days: day.factor.days })}
           {estimate.isPending ? ` · ${t('estimating')}` : ''}
+        </p>
+        <p className="ld-meta" data-testid="ai-status">
+          {t(`aiStatus_${day.aiStatus}`, { reason: day.aiReason ?? '?', min: day.aiRetryMin ?? 0 })}
         </p>
       </section>
 

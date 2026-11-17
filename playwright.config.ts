@@ -57,7 +57,9 @@ export default defineConfig({
         KOSYNC_USER: 'e2e',
         KOSYNC_PASSWORD: 'e2e-wachtwoord',
         KOSYNC_SYNC_MINUTES: '0',
-        NODE_ENV: 'test'
+        NODE_ENV: 'test',
+        // Geen echte AI-aanroepen vanuit e2e, ook niet als de sleutel in je eigen shell staat.
+        MISTRAL_API_KEY: ''
       }
     }
   ]

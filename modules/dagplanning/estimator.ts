@@ -1,16 +1,19 @@
 import { z } from 'zod';
 import { STEPS, snap } from './logic.js';
 
-/** Schat per titel de duur in minuten; null = niet gelukt (de regel-heuristiek neemt het dan over). */
-export type Estimator = (titles: string[]) => Promise<number[] | null>;
+/** Schat per titel de duur in minuten; `error` (korte, veilige reden) = niet gelukt, de regel-heuristiek neemt het dan over. */
+export type EstimateResult = { values: number[] } | { error: string };
+export type Estimator = (titles: string[]) => Promise<EstimateResult>;
 
 export const MAX_BATCH = 25;
 const DEFAULT_MODEL = 'mistral-small-latest';
 const DEFAULT_BASE = 'https://api.mistral.ai/v1';
 
-const Output = z.object({
-  estimates: z.array(z.object({ n: z.number().int(), minutes: z.number() }))
-});
+/** Toleranter: getallen als tekst mogen, onbekende velden worden genegeerd. */
+const Entry = z.object({ n: z.coerce.number().int(), minutes: z.coerce.number() });
+const Output = z.union([z.array(Entry), z.object({ estimates: z.array(Entry) }).transform((o) => o.estimates)]);
+
+export const modelOf = (env: Record<string, string | undefined>): string => env.DAGPLANNING_MODEL?.trim() || DEFAULT_MODEL;
 
 const SYSTEM = [
   'You estimate how long tasks take for one person, the way a calm, realistic planner would.',
@@ -42,11 +45,17 @@ async function reason(res: Response): Promise<string> {
 export function createEstimator(env: Record<string, string | undefined>, fetchImpl: Fetch = fetch, retryScaleMs = 1000): Estimator | null {
   const key = env.MISTRAL_API_KEY?.trim();
   if (!key) return null;
-  const model = env.DAGPLANNING_MODEL?.trim() || DEFAULT_MODEL;
+  const model = modelOf(env);
   const base = (env.MISTRAL_BASE_URL?.trim() || DEFAULT_BASE).replace(/\/$/, '');
 
+  const fail = (why: string): { error: string } => {
+    // Alleen een korte reden: nooit titels, de sleutel of de ruwe body.
+    console.error(`[dagplanning] schatten mislukt: ${why}`);
+    return { error: why };
+  };
+
   return async (titles) => {
-    if (titles.length === 0) return [];
+    if (titles.length === 0) return { values: [] };
     const batch = titles.slice(0, MAX_BATCH);
     const list = batch.map((t, i) => `${i + 1}. ${t}`).join('\n');
     try {
@@ -73,24 +82,28 @@ export function createEstimator(env: Record<string, string | undefined>, fetchIm
         await new Promise((r) => setTimeout(r, wait * retryScaleMs));
         res = await call();
       }
-      if (!res.ok) {
-        // Status en foutsoort van de aanbieder loggen (bijv. een limiet van het abonnement), nooit titels of de sleutel.
-        console.error(`[dagplanning] schatten mislukt: HTTP ${res.status}${await reason(res)}`);
-        return null;
-      }
+      // Status en foutsoort van de aanbieder (bijv. een limiet van het abonnement), nooit titels of de sleutel.
+      if (!res.ok) return fail(`HTTP ${res.status}${await reason(res)}`);
       const data = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
       const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== 'string') return null;
-      const parsed = Output.safeParse(JSON.parse(content));
-      if (!parsed.success) return null;
-      const byN = new Map(parsed.data.estimates.map((e) => [e.n, e.minutes]));
-      return batch.map((_, i) => {
+      if (typeof content !== 'string') return fail('geen tekst in antwoord');
+      let json: unknown;
+      try {
+        json = JSON.parse(content);
+      } catch {
+        return fail('geen geldige JSON');
+      }
+      const parsed = Output.safeParse(json);
+      if (!parsed.success) return fail('antwoord past niet in schema');
+      const byN = new Map(parsed.data.map((e) => [e.n, e.minutes]));
+      const values = batch.map((_, i) => {
         const v = byN.get(i + 1);
         return typeof v === 'number' && v > 0 ? snap(v) : 0;
       });
+      console.log(`[dagplanning] AI-schatting: ${values.filter((v) => v > 0).length} van ${batch.length} taken`);
+      return { values };
     } catch (err) {
-      console.error('[dagplanning] schatten mislukt:', err instanceof Error ? err.name : 'onbekend');
-      return null;
+      return fail(err instanceof Error ? err.name : 'onbekend');
     }
   };
 }

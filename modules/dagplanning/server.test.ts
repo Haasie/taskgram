@@ -1,14 +1,14 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../server/app.js';
 import type { Config } from '../../server/config.js';
 import { createModuleRuntime } from '../../server/modules/routes.js';
 import { createModuleStore } from '../../server/modules/store.js';
 import { MODULES } from '../../server/modules/discover.js';
 import { UpstreamError, type PostgramClient, type RawEntity } from '../../server/postgram.js';
-import { createEstimator } from './estimator.js';
+import { createEstimator, type Estimator } from './estimator.js';
 import type { CalendarSource } from '../../server/calendar.js';
 
 const SECRET = 'x'.repeat(40);
@@ -74,7 +74,7 @@ function task(i: number, content: string, extra: Partial<RawEntity> = {}): RawEn
 
 function setup(
   seed: RawEntity[],
-  opts: { enabled?: boolean; estimator?: (titles: string[]) => Promise<number[] | null>; calendar?: CalendarSource | null } = {}
+  opts: { enabled?: boolean; estimator?: Estimator; calendar?: CalendarSource | null } = {}
 ) {
   const { pg, store, spies } = fakePg(seed);
   const moduleStore = createModuleStore(mkdtempSync(join(tmpdir(), 'tg-dagplanning-')), MODULES);
@@ -283,7 +283,7 @@ describe('dagplanning: afvinken', () => {
 
 describe('dagplanning: schatten', () => {
   it('AI vult ontbrekende schattingen in; alleen titels gaan mee', async () => {
-    const estimator = vi.fn(async (titles: string[]) => titles.map(() => 45));
+    const estimator = vi.fn(async (titles: string[]) => ({ values: titles.map(() => 45) }));
     const { call, store } = setup([task(1, 'Rapport reviewen\n\nGeheime notities hier'), task(2, 'Agentklus', { tags: ['agent'] })], { estimator });
     const res = await call('POST', '/estimate', { date: DAY });
     expect(res.json).toEqual({ estimated: 1, source: 'ai' });
@@ -299,7 +299,7 @@ describe('dagplanning: schatten', () => {
   });
 
   it('een mislukte AI-ronde schrijft niets weg en probeert het pas na de afkoeltijd opnieuw', async () => {
-    const estimator = vi.fn(async (): Promise<number[] | null> => null);
+    const estimator = vi.fn(async (): Promise<{ error: string }> => ({ error: 'HTTP 429 (limiet)' }));
     const { call, store } = setup([task(1, 'Erik bellen')], { estimator });
     expect((await call('POST', '/estimate', { date: DAY })).json).toEqual({ estimated: 0, source: null });
     expect(store.get(id(1))!.metadata.estimate_min).toBeUndefined();
@@ -310,8 +310,40 @@ describe('dagplanning: schatten', () => {
     expect(estimator).toHaveBeenCalledTimes(1);
   });
 
+  it('aiStatus: off-nokey, on, cooling en failed', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const { call, runtime } = setup([task(1, 'Rapport schrijven')]);
+    const st = async () => (await call('GET', `/day?date=${DAY}`)).json;
+    expect(await st()).toMatchObject({ aiStatus: 'off-nokey', ai: false });
+    expect(log).toHaveBeenCalledWith('[dagplanning] AI-schatting uit: geen MISTRAL_API_KEY');
+    log.mockRestore();
+
+    const estimator = vi.fn(async (): Promise<{ error: string }> => ({ error: 'HTTP 429 (limiet)' }));
+    const state = runtime.contexts.get('dagplanning')!.state as any;
+    state.estimator = estimator;
+    expect(await st()).toMatchObject({ aiStatus: 'on', ai: true });
+
+    await call('POST', '/estimate', { date: DAY });
+    expect(await st()).toMatchObject({ aiStatus: 'cooling', aiReason: 'HTTP 429 (limiet)', aiRetryMin: 10 });
+    await call('POST', '/estimate', { date: DAY });
+    expect(estimator).toHaveBeenCalledTimes(1);
+
+    state.lastAi.at -= 11 * 60_000;
+    expect(await st()).toMatchObject({ aiStatus: 'failed', aiReason: 'HTTP 429 (limiet)' });
+
+    state.estimator = async (t: string[]) => ({ values: t.map(() => 30) });
+    await call('POST', '/estimate', { date: DAY });
+    expect(await st()).toMatchObject({ aiStatus: 'on' });
+  });
+
+  it('aiStatus off-setting als AI in de instellingen uit staat', async () => {
+    const { call } = setup([task(1, 'Rapport schrijven')], { estimator: async () => ({ values: [30] }) });
+    expect((await call('PUT', '/settings', { values: { aiEstimates: false } })).status).toBe(200);
+    expect((await call('GET', `/day?date=${DAY}`)).json).toMatchObject({ aiStatus: 'off-setting', ai: false });
+  });
+
   it('een weggeschreven regel-schatting van een eerdere mislukte ronde krijgt alsnog een AI-schatting', async () => {
-    const estimator = vi.fn(async (titles: string[]) => titles.map(() => 90));
+    const estimator = vi.fn(async (titles: string[]) => ({ values: titles.map(() => 90) }));
     const { call, store } = setup([task(1, 'Rapport schrijven', { metadata: { estimate_min: 45, estimate_source: 'rule' } }), task(2, 'Van mij', { metadata: { estimate_min: 30, estimate_source: 'user' } })], { estimator });
     expect((await call('GET', `/day?date=${DAY}`)).json.missingEstimates).toBe(1);
     expect((await call('POST', '/estimate', { date: DAY })).json).toEqual({ estimated: 1, source: 'ai' });
@@ -323,12 +355,12 @@ describe('dagplanning: schatten', () => {
     const ok = () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ estimates: [{ n: 1, minutes: 30 }] }) } }] }), { status: 200 });
     const busy = () => new Response(JSON.stringify({ type: 'service_tier_capacity_exceeded', message: 'niet loggen' }), { status: 429 });
     const once = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(ok());
-    expect(await createEstimator({ MISTRAL_API_KEY: 'k' }, once as unknown as typeof fetch, 0)!(['Een'])).toEqual([30]);
+    expect(await createEstimator({ MISTRAL_API_KEY: 'k' }, once as unknown as typeof fetch, 0)!(['Een'])).toEqual({ values: [30] });
     expect(once).toHaveBeenCalledTimes(2);
 
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const twice = vi.fn().mockResolvedValueOnce(busy()).mockResolvedValueOnce(busy());
-    expect(await createEstimator({ MISTRAL_API_KEY: 'k' }, twice as unknown as typeof fetch, 0)!(['Een'])).toBeNull();
+    expect(await createEstimator({ MISTRAL_API_KEY: 'k' }, twice as unknown as typeof fetch, 0)!(['Een'])).toEqual({ error: 'HTTP 429 (service_tier_capacity_exceeded)' });
     expect(twice).toHaveBeenCalledTimes(2);
     expect(log).toHaveBeenCalledWith('[dagplanning] schatten mislukt: HTTP 429 (service_tier_capacity_exceeded)');
     log.mockRestore();
@@ -345,7 +377,7 @@ describe('dagplanning: schatten', () => {
       new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ estimates: [{ n: 1, minutes: 37 }, { n: 2, minutes: 200 }] }) } }] }), { status: 200 })
     );
     const est = createEstimator({ MISTRAL_API_KEY: 'k' }, fetchImpl as unknown as typeof fetch)!;
-    expect(await est(['Een', 'Twee'])).toEqual([30, 180]);
+    expect(await est(['Een', 'Twee'])).toEqual({ values: [30, 180] });
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe('https://api.mistral.ai/v1/chat/completions');
     const body = JSON.parse(init.body as string);
@@ -354,12 +386,56 @@ describe('dagplanning: schatten', () => {
     expect((init.headers as Record<string, string>).authorization).toBe('Bearer k');
   });
 
-  it('de Mistral-schatter geeft null bij een fout of onzin, zodat de regel het overneemt', async () => {
-    const down = createEstimator({ MISTRAL_API_KEY: 'k' }, (async () => new Response('{}', { status: 503 })) as unknown as typeof fetch)!;
-    expect(await down(['Een'])).toBeNull();
-    const junk = createEstimator({ MISTRAL_API_KEY: 'k' }, (async () =>
-      new Response(JSON.stringify({ choices: [{ message: { content: 'geen json' } }] }), { status: 200 })) as unknown as typeof fetch)!;
-    expect(await junk(['Een'])).toBeNull();
+  describe('faalpaden van de Mistral-schatter', () => {
+    const reply = (content: unknown, status = 200) =>
+      (async () => new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status })) as unknown as typeof fetch;
+    const run = async (f: typeof fetch, titles = ['Verzonnen titel']) => createEstimator({ MISTRAL_API_KEY: 'geheime-sleutel' }, f, 0)!(titles);
+    let err: ReturnType<typeof vi.spyOn>;
+    let out: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      out = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    });
+    afterEach(() => {
+      err.mockRestore();
+      out.mockRestore();
+    });
+    const logged = () => [...err.mock.calls, ...out.mock.calls].map((c) => c.join(' ')).join('\n');
+
+    it('HTTP-fout: status en code, geen body', async () => {
+      const r = await run((async () => new Response(JSON.stringify({ error: { code: 'quota' }, message: 'Verzonnen titel' }), { status: 503 })) as unknown as typeof fetch);
+      expect(r).toEqual({ error: 'HTTP 503 (quota)' });
+      expect(err).toHaveBeenCalledWith('[dagplanning] schatten mislukt: HTTP 503 (quota)');
+      expect(logged()).not.toContain('Verzonnen titel');
+    });
+    it('exception: alleen de naam van de fout', async () => {
+      const r = await run((async () => {
+        throw new TypeError('verbinding met geheime-sleutel mislukt');
+      }) as unknown as typeof fetch);
+      expect(r).toEqual({ error: 'TypeError' });
+      expect(logged()).not.toContain('geheime-sleutel');
+    });
+    it('content is geen tekst', async () => {
+      expect(await run(reply(null))).toEqual({ error: 'geen tekst in antwoord' });
+      expect(err).toHaveBeenCalledWith('[dagplanning] schatten mislukt: geen tekst in antwoord');
+    });
+    it('content is geen JSON', async () => {
+      expect(await run(reply('Verzonnen titel is geen json'))).toEqual({ error: 'geen geldige JSON' });
+      expect(logged()).not.toContain('Verzonnen titel');
+    });
+    it('JSON past niet in het schema', async () => {
+      expect(await run(reply(JSON.stringify({ estimates: [{ n: 'x', minutes: 'veel' }] })))).toEqual({ error: 'antwoord past niet in schema' });
+      expect(await run(reply(JSON.stringify({ iets: 1 })))).toEqual({ error: 'antwoord past niet in schema' });
+    });
+    it('toleranties: getallen als tekst, top-level array, extra velden', async () => {
+      expect(await run(reply(JSON.stringify({ estimates: [{ n: '1', minutes: '30', why: 'x' }] })))).toEqual({ values: [30] });
+      expect(await run(reply(JSON.stringify([{ n: 1, minutes: 45 }, { n: '2', minutes: '60', extra: true }])), ['A', 'B'])).toEqual({ values: [45, 60] });
+    });
+    it('succes logt alleen aantallen', async () => {
+      await run(reply(JSON.stringify({ estimates: [{ n: 1, minutes: 30 }] })), ['Verzonnen titel', 'Tweede']);
+      expect(out).toHaveBeenCalledWith('[dagplanning] AI-schatting: 1 van 2 taken');
+      expect(logged()).not.toContain('Verzonnen titel');
+    });
   });
 
   it('zonder sleutel geen AI-schatter', () => {
