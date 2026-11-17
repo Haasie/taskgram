@@ -32,8 +32,28 @@ export type RawEdge = {
 
 type Query = Record<string, string | number | boolean | undefined>;
 
-export function createPostgramClient(config: Config) {
+/**
+ * Hoe lang de lijst afgeronde taken gedeeld wordt. Push-scheduler, Briefing en Dagplanning halen hem elk
+ * los op (de Dagplanning soms twee keer per verzoek), en het is de duurste lijst: alles wat ooit af is.
+ * Elke schrijfactie via deze client leegt de cache, dus een net afgevinkte taak telt direct mee.
+ * Wijzigingen buiten Taskgram om (pgm, agents) zijn hooguit zo lang onzichtbaar.
+ */
+export const DONE_CACHE_MS = 60_000;
+
+export function createPostgramClient(config: Config, opts: { now?: () => number; doneTtlMs?: number } = {}) {
+  const now = opts.now ?? Date.now;
+  const doneTtl = opts.doneTtlMs ?? DONE_CACHE_MS;
+  let doneCache: { at: number; items: RawEntity[] } | null = null;
+  let doneInflight: Promise<RawEntity[]> | null = null;
+  // Ophoogteller: een lijst die al onderweg was tijdens een schrijfactie mag de cache niet meer vullen.
+  let generation = 0;
+
   async function request<T>(method: string, path: string, opts: { query?: Query; body?: unknown } = {}): Promise<T> {
+    if (method !== 'GET') {
+      generation += 1;
+      doneCache = null;
+      doneInflight = null;
+    }
     const url = new URL(config.pgmApiUrl + path);
     for (const [key, value] of Object.entries(opts.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -82,8 +102,24 @@ export function createPostgramClient(config: Config) {
     return items;
   }
 
+  function listDone(): Promise<RawEntity[]> {
+    if (doneCache && now() - doneCache.at < doneTtl) return Promise.resolve(doneCache.items);
+    if (doneInflight) return doneInflight;
+    const started = generation;
+    const p = listAll('/api/tasks', { status: 'done' })
+      .then((items) => {
+        if (started === generation) doneCache = { at: now(), items };
+        return items;
+      })
+      .finally(() => {
+        if (doneInflight === p) doneInflight = null;
+      });
+    doneInflight = p;
+    return p;
+  }
+
   return {
-    listTasks: (status: string) => listAll('/api/tasks', { status }),
+    listTasks: (status: string) => (status === 'done' ? listDone() : listAll('/api/tasks', { status })),
     listTasksPage: (status: string, limit: number, offset: number) =>
       request<{ items: RawEntity[]; total: number }>('GET', '/api/tasks', { query: { status, limit, offset } }),
     listProjects: () => listAll('/api/entities', { type: 'project' }),
