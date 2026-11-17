@@ -384,8 +384,15 @@ test('E11: Update notice when a new service worker takes over', async ({ page })
   await waitForSw(page);
   await expect(page.getByText('Inbox taak 1')).toBeVisible();
   await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
-  await expect(page.getByText('Er is een nieuwe versie van de app.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Vernieuwen' })).toBeVisible();
+  const bar = page.getByTestId('update-bar');
+  await expect(bar).toContainText('Nieuwe versie van Taskgram');
+  await expect(bar.getByRole('button', { name: 'Herladen' })).toBeVisible();
+
+  // "Later" verbergt het balkje tot de volgende nieuwe versie.
+  await bar.getByRole('button', { name: 'Later' }).click();
+  await expect(bar).toBeHidden();
+  await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event('controllerchange')));
+  await expect(bar).toBeVisible();
 });
 
 test('E12: Quick Add Magic, favorites and saved filters', async ({ page }) => {
