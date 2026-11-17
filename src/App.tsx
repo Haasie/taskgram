@@ -42,6 +42,7 @@ import { ConflictDialog } from './components/ConflictDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TaskRow } from './components/TaskRow';
 import { Toasts } from './components/Toasts';
+import { UpdateBar } from './components/UpdateBar';
 import { isListedProject, projectTitle, UiContext, type Ui } from './components/UiContext';
 import { WhenPicker, type PickerState } from './components/WhenPicker';
 import { LoginScreen } from './components/LoginScreen';
@@ -601,6 +602,7 @@ export function App() {
       <ConflictDialog open={conflictDialogOpen} onClose={() => setConflictDialogOpen(false)} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} auth={authData} />
       <Toasts />
+      <UpdateBar />
     </UiContext.Provider>
   );
 }
