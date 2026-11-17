@@ -9,7 +9,7 @@ import { dayWindow } from '../../server/calendar.js';
 import { completionDayInZone, type DigestMessage } from '../../shared/digest.js';
 import { deadline, isOpen, priority } from '../../shared/taskFields.js';
 import type { Task } from '../../shared/types.js';
-import { createEstimator, MAX_BATCH, type Estimator } from './estimator.js';
+import { createEstimator, MAX_BATCH, modelOf, type Estimator } from './estimator.js';
 import {
   adjustEstimate,
   bucketOf,
@@ -54,7 +54,10 @@ const closeBody = z.object({ date, moves: z.array(move).max(60).default([]) }).s
 const feedbackBody = z.object({ id: uuid, verdict: z.enum(['longer', 'shorter']) }).strict();
 const estimateBody = z.object({ date }).strict();
 
-type State = { estimator?: Estimator | null; aiFailedAt?: number };
+/** Laatste AI-ronde: voor de statusregel. `reason` is een korte, gesanitiseerde reden uit de schatter. */
+type LastAi = { at: number; ok: boolean; reason?: string };
+type State = { estimator?: Estimator | null; lastAi?: LastAi };
+export type AiStatus = 'on' | 'off-setting' | 'off-nokey' | 'cooling' | 'failed';
 
 /** Na een mislukte AI-ronde (rate limit, storing) even niet opnieuw proberen. */
 const AI_COOLDOWN_MS = 10 * 60_000;
@@ -66,8 +69,24 @@ const settingsOf = (ctx: ModuleContext): Settings & { aiEstimates: boolean; auto
 
 function estimatorOf(ctx: ModuleContext): Estimator | null {
   const state = ctx.state as State;
-  if (state.estimator === undefined) state.estimator = createEstimator(ctx.env);
+  if (state.estimator === undefined) {
+    state.estimator = createEstimator(ctx.env);
+    console.log(state.estimator ? `[dagplanning] AI-schatting aan (model ${modelOf(ctx.env)})` : '[dagplanning] AI-schatting uit: geen MISTRAL_API_KEY');
+  }
   return state.estimator;
+}
+
+const isCooling = (state: State): boolean => !!state.lastAi && !state.lastAi.ok && Date.now() - state.lastAi.at < AI_COOLDOWN_MS;
+
+/** Waarom (niet) AI schat, voor de statusregel in de ochtend. */
+function aiStatusOf(ctx: ModuleContext, s: { aiEstimates: boolean }): { aiStatus: AiStatus; aiReason?: string; aiRetryMin?: number } {
+  if (!s.aiEstimates) return { aiStatus: 'off-setting' };
+  if (estimatorOf(ctx) === null) return { aiStatus: 'off-nokey' };
+  const state = ctx.state as State;
+  const last = state.lastAi;
+  if (!last || last.ok) return { aiStatus: 'on' };
+  if (isCooling(state)) return { aiStatus: 'cooling', aiReason: last.reason, aiRetryMin: Math.max(1, Math.ceil((last.at + AI_COOLDOWN_MS - Date.now()) / 60_000)) };
+  return { aiStatus: 'failed', aiReason: last.reason };
 }
 
 async function openTasks(ctx: ModuleContext): Promise<Task[]> {
@@ -228,6 +247,7 @@ async function dayView(ctx: ModuleContext, day: string) {
       capacity: { normal: capacity(day, 'normal', s, agenda.busy), busy: capacity(day, 'busy', s, agenda.busy), off: capacity(day, 'off', s, agenda.busy) }
     },
     ai: s.aiEstimates && estimatorOf(ctx) !== null,
+    ...aiStatusOf(ctx, s),
     missingEstimates: pool.filter((t) => !isAgentTask(t, s) && needsEstimate(t, s.aiEstimates && estimatorOf(ctx) !== null)).length,
     leftovers: view(cand.leftovers),
     today: view([...cand.today, ...extraPlanned]),
@@ -269,9 +289,11 @@ export function routes(ctx: ModuleContext) {
       .filter((t) => !isAgentTask(t, s) && needsEstimate(t, estimator !== null))
       .slice(0, MAX_BATCH);
     if (missing.length === 0) return c.json({ estimated: 0, source: null });
-    const cooling = estimator !== null && Date.now() - (state.aiFailedAt ?? 0) < AI_COOLDOWN_MS;
-    const ai = estimator && !cooling ? await estimator(missing.map((t) => titleOf(t))) : null;
-    if (estimator && !cooling) state.aiFailedAt = ai ? undefined : Date.now();
+    const cooling = estimator !== null && isCooling(state);
+    const result = estimator && !cooling ? await estimator(missing.map((t) => titleOf(t))) : null;
+    // De status volgt uit de laatste echte poging; een overgeslagen ronde (cooldown) laat hem staan.
+    if (result) state.lastAi = 'error' in result ? { at: Date.now(), ok: false, reason: result.error } : { at: Date.now(), ok: true };
+    const ai = result && 'values' in result ? result.values : null;
     // AI aan maar niet gelukt: niets wegschrijven. De regel geldt dan alleen bij het tonen, zodat de volgende
     // ronde het opnieuw kan proberen in plaats van dat de noodgreep blijft staan.
     if (estimator && !ai) return c.json({ estimated: 0, source: null });
