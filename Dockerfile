@@ -6,8 +6,9 @@ COPY . .
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22.23.4-alpine
+ARG GIT_SHA=unknown
 WORKDIR /app
-ENV NODE_ENV=production PORT=3000 STATIC_DIR=/app/dist DATA_DIR=/app/data APP_TIMEZONE=Europe/Amsterdam
+ENV NODE_ENV=production PORT=3000 STATIC_DIR=/app/dist DATA_DIR=/app/data APP_TIMEZONE=Europe/Amsterdam GIT_SHA=${GIT_SHA}
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server

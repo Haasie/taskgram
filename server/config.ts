@@ -16,7 +16,12 @@ export type Config = {
   appTimezone: string;
   push?: PushConfig | null;
   dataDir?: string;
+  /** Welke build draait: commit van het image en, bij een overlay, de commit van de core. */
+  version?: { commit: string | null; core: string | null };
 };
+
+/** Alleen een echte commit-hash doorlaten; 'unknown' of iets anders wordt null. */
+const sha = (v: string | undefined) => (v && /^[0-9a-f]{7,40}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const required = (name: string) => {
@@ -68,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     staticDir: env.STATIC_DIR ?? './dist',
     appTimezone,
     push,
-    dataDir
+    dataDir,
+    version: { commit: sha(env.GIT_SHA), core: sha(env.TASKGRAM_REF) }
   };
 }

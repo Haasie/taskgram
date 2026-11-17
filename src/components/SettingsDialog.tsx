@@ -33,6 +33,22 @@ export function SettingsDialog({
   const [testing, setTesting] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [version, setVersion] = useState<{ commit: string | null; core: string | null } | null>(null);
+
+  // Welke build draait er op de server; zo is na een uitrol te zien of hij binnen is.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/health', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((v) => {
+        if (!cancelled && v && typeof v === 'object') setVersion({ commit: v.commit ?? null, core: v.core ?? null });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -340,6 +356,12 @@ export function SettingsDialog({
             </>
           )}
         </div>
+        {version && (version.commit || version.core) && (
+          <p className="mt-4 font-mono text-xs text-zinc-500 dark:text-zinc-400" data-testid="app-version">
+            {t('settings.version')}: {version.commit ? version.commit.slice(0, 7) : '?'}
+            {version.core ? ` · core ${version.core.slice(0, 7)}` : ''}
+          </p>
+        )}
       </div>
     </Modal>
   );

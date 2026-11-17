@@ -28,7 +28,18 @@ type Fetch = typeof fetch;
  * AI-schatter via de Mistral chat-API (JSON-modus). Alleen de titel (eerste regel) gaat mee, nooit notities of
  * checklist. Zonder MISTRAL_API_KEY bestaat hij niet en gebruikt de module alleen de regel-heuristiek.
  */
-export function createEstimator(env: Record<string, string | undefined>, fetchImpl: Fetch = fetch): Estimator | null {
+/** Korte, veilige omschrijving uit de foutbody van de aanbieder: alleen een soort of code, afgekapt. */
+async function reason(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { type?: unknown; code?: unknown; error?: { type?: unknown; code?: unknown } };
+    const kind = [body.type, body.code, body.error?.type, body.error?.code].find((v) => typeof v === 'string' || typeof v === 'number');
+    return kind === undefined ? '' : ` (${String(kind).replace(/[^\w .:-]/g, '').slice(0, 60)})`;
+  } catch {
+    return '';
+  }
+}
+
+export function createEstimator(env: Record<string, string | undefined>, fetchImpl: Fetch = fetch, retryScaleMs = 1000): Estimator | null {
   const key = env.MISTRAL_API_KEY?.trim();
   if (!key) return null;
   const model = env.DAGPLANNING_MODEL?.trim() || DEFAULT_MODEL;
@@ -39,24 +50,32 @@ export function createEstimator(env: Record<string, string | undefined>, fetchIm
     const batch = titles.slice(0, MAX_BATCH);
     const list = batch.map((t, i) => `${i + 1}. ${t}`).join('\n');
     try {
-      const res = await fetchImpl(`${base}/chat/completions`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({
-          model,
-          temperature: 0,
-          max_tokens: 2000,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: SYSTEM },
-            { role: 'user', content: `Tasks:\n${list}` }
-          ]
-        }),
-        signal: AbortSignal.timeout(60_000)
-      });
+      const call = () =>
+        fetchImpl(`${base}/chat/completions`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({
+            model,
+            temperature: 0,
+            max_tokens: 2000,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: SYSTEM },
+              { role: 'user', content: `Tasks:\n${list}` }
+            ]
+          }),
+          signal: AbortSignal.timeout(60_000)
+        });
+      let res = await call();
+      // Druk bij de aanbieder (429) is vaak na een paar tellen voorbij: één herkansing, daarna pas opgeven.
+      if (res.status === 429) {
+        const wait = Math.min(Math.max(Number(res.headers.get('retry-after')) || 0, 2), 8);
+        await new Promise((r) => setTimeout(r, wait * retryScaleMs));
+        res = await call();
+      }
       if (!res.ok) {
-        // Alleen de status loggen, nooit titels of de sleutel.
-        console.error(`[dagplanning] schatten mislukt: HTTP ${res.status}`);
+        // Status en foutsoort van de aanbieder loggen (bijv. een limiet van het abonnement), nooit titels of de sleutel.
+        console.error(`[dagplanning] schatten mislukt: HTTP ${res.status}${await reason(res)}`);
         return null;
       }
       const data = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };

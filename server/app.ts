@@ -46,6 +46,11 @@ export function createApp(
   );
 
   app.get('/healthz', (c) => c.text('ok'));
+  // Welke versie draait er? Publiek zoals /healthz: een commit-hash is geen geheim en zo is een uitrol te controleren.
+  app.get('/health', (c) => {
+    c.header('cache-control', 'no-store');
+    return c.json({ status: 'ok', commit: config.version?.commit ?? null, core: config.version?.core ?? null });
+  });
 
   // Alleen fouten loggen: 5xx-antwoorden met duur en, bij een upstream-fout, de oorzaak. Geen querystring
   // (kan zoektermen bevatten). Onverwachte fouten logt onError hieronder al met stacktrace.
