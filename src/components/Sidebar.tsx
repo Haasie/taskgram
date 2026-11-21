@@ -94,7 +94,7 @@ export function Sidebar({ route, tasks, projects, today, onNavigate, onNewProjec
           id="favorites"
           active={route.kind === 'favorites'}
           onClick={() => onNavigate({ kind: 'favorites' })}
-          icon={<FavoritesIcon size={17} className={`${EXTRA_META.favorites.color} fill-rose-400`} />}
+          icon={<FavoritesIcon size={17} className={EXTRA_META.favorites.color} />}
           label={EXTRA_META.favorites.label}
           count={favorites || undefined}
         />

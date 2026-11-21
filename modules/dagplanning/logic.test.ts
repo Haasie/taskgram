@@ -157,12 +157,14 @@ describe('voorstel voor de ochtend', () => {
   it('kandidaten: gisteren-gemist apart, inbox alleen als aantal', () => {
     const missed = task('Gisteren gemist', { metadata: { start_date: '2026-11-15' } });
     const todays = task('Vandaag');
-    const fav = task('Favoriet', { metadata: { start_date: null, favorite: true } });
+    const fav = task('Alleen vastgepind', { metadata: { start_date: null, favorite: true } });
+    const high = task('Hoge prio', { metadata: { start_date: null, priority: 3 } });
     const inbox = task('Inbox-ding', { status: 'inbox', metadata: { start_date: null } });
-    const c = candidates([missed, todays, fav, inbox], TODAY, plan('2026-11-15', [missed.id], []));
+    const c = candidates([missed, todays, fav, high, inbox], TODAY, plan('2026-11-15', [missed.id], []));
     expect(c.leftovers.map((t) => t.id)).toEqual([missed.id]);
     expect(c.today.map((t) => t.id)).toEqual([todays.id]);
-    expect(c.extra.map((t) => t.id)).toEqual([fav.id]);
+    // Vastpinnen is geen urgentie: alleen prioriteit telt voor Erbij?
+    expect(c.extra.map((t) => t.id)).toEqual([high.id]);
     expect(c.inbox).toBe(1);
   });
 });

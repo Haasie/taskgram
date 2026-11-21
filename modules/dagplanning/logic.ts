@@ -299,7 +299,8 @@ const byUrgency = (today: string) => (a: Task, b: Task) =>
  * Kandidaten voor vandaag, in drie groepen:
  * - leftovers: stond gisteren gepland, niet af, staat nog open
  * - today: wat de lijst Vandaag nu toont (start ≤ vandaag of deadline bereikt)
- * - extra: open taken met prioriteit ≥ 3 of favoriet die (nog) niet op Vandaag staan
+ * - extra: open taken met prioriteit ≥ 3 die (nog) niet op Vandaag staan.
+ *   Vastpinnen (metadata.favorite) is snel terugvinden, geen urgentie: telt hier bewust niet mee.
  * Inbox blijft buiten: alleen het aantal, zodat een volle inbox de ochtend niet platslaat.
  */
 export function candidates(tasks: Task[], today: string, previous: DayPlan | null) {
@@ -315,7 +316,7 @@ export function candidates(tasks: Task[], today: string, previous: DayPlan | nul
         !leftIds.has(t.id) &&
         !todayIds.has(t.id) &&
         (t.status === 'next' || t.status === 'active') &&
-        (priority(t) >= 3 || t.metadata.favorite === true)
+        priority(t) >= 3
     )
     .sort(byUrgency(today))
     .slice(0, 12);

@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Copy, Flag, Heart, ListChecks, Moon, Repeat, Star, Tag, Trash2 } from 'lucide-react';
+import { Bell, CalendarDays, Copy, Flag, ListChecks, Moon, Pin, Repeat, Star, Tag, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ChecklistItem, Task, Visibility } from '../../shared/types.js';
 import { formatDeadline, formatShort } from '../../shared/dates.js';
@@ -148,7 +148,7 @@ export function TaskEditor({ task }: { task: Task }) {
             title={favorite ? t('task.unfavorite') : t('task.favorite')}
             onClick={() => void updateTask(task, { metadata: { favorite: favorite ? null : true } })}
           >
-            <Heart size={17} className={favorite ? 'fill-rose-400 text-rose-400' : ''} />
+            <Pin size={17} className={favorite ? 'fill-current text-zinc-700 dark:text-zinc-200' : ''} />
           </button>
           <button type="button" className="icon-btn" title={t('task.when')} onClick={() => ui.openPicker({ task, mode: 'when' })}>
             <CalendarDays size={17} />
