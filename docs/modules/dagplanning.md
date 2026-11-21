@@ -45,7 +45,7 @@ Only personal feeds belong here. Your work calendar is never read.
 2. Two meters, *Work* and *Personal*: planned load against available time, with a shape and a word —
    ● Room, ▲ Tight, ■ Overfull.
 3. *Left over from yesterday*: one button sends all of it to later, or choose per task. Choosing nothing leaves it where it is.
-4. *Today*: preselected up to your capacity, overdue first (an overdue backlog does not overfill the day); tick to plan. *Add?*: important or favourite tasks not on Today yet.
+4. *Today*: preselected up to your capacity, overdue first (an overdue backlog does not overfill the day); tick to plan. *Add?*: high-priority tasks (3+) not on Today yet. Pinned tasks don't count: pinning is for quick access, priority is for importance.
 5. *Lock in plan*. If a meter is overfull (or there are too many agents), the plan asks once: *on purpose?* After that it stays quiet.
 
 Planned tasks that were not on Today yet are moved there.

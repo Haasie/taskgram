@@ -404,7 +404,7 @@ export function App() {
       const { label, Icon, color } = EXTRA_META[view.kind];
       return (
         <>
-          <ViewTitle icon={<Icon size={26} className={`${color} ${view.kind === 'favorites' ? 'fill-rose-400' : ''}`} />} title={label} />
+          <ViewTitle icon={<Icon size={26} className={`${color} `} />} title={label} />
           {view.kind === 'filter' && (
             <FilterBar
               query={view.query}
