@@ -43,6 +43,8 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { TaskRow } from './components/TaskRow';
 import { Toasts } from './components/Toasts';
 import { UpdateBar } from './components/UpdateBar';
+import { FocusTimer } from './components/FocusTimer';
+import { getFocus, startFocus } from './lib/focus';
 import { isListedProject, projectTitle, UiContext, type Ui } from './components/UiContext';
 import { WhenPicker, type PickerState } from './components/WhenPicker';
 import { LoginScreen } from './components/LoginScreen';
@@ -244,6 +246,9 @@ export function App() {
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Het focusscherm ligt over de lijst: geen sneltoetsen voor taken die je niet ziet.
+      const focus = getFocus();
+      if (focus && !focus.minimized) return;
 
       const selected = ordered.find((t) => t.id === selectedId) ?? null;
       const move = (delta: number) => {
@@ -301,6 +306,8 @@ export function App() {
           return setPicker({ task: selected, mode: 'deadline' });
         case 'f':
           return void updateTask(selected, { metadata: { favorite: isFavorite(selected) ? null : true } });
+        case 'F':
+          return startFocus(selected, splitContent(selected.content).title);
         case 'p':
           return void updateTask(selected, { metadata: { priority: (priority(selected) + 1) % 6 || null } });
         case 'Backspace':
@@ -601,6 +608,7 @@ export function App() {
       <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <ConflictDialog open={conflictDialogOpen} onClose={() => setConflictDialogOpen(false)} />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} auth={authData} />
+      <FocusTimer />
       <Toasts />
       <UpdateBar />
     </UiContext.Provider>
@@ -738,6 +746,7 @@ function ShortcutHelp({ open, onClose }: { open: boolean; onClose: () => void })
     ['w', t('task.whenDots')],
     ['d', t('task.deadlineDots')],
     ['f', t('shortcuts.favorite')],
+    ['⇧F', t('shortcuts.focus')],
     ['p', t('shortcuts.priority')],
     ['⌫', t('shortcuts.delete')],
     ['1 – 7', t('shortcuts.listsRange')]

@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Copy, Flag, ListChecks, Moon, Pin, Repeat, Star, Tag, Trash2 } from 'lucide-react';
+import { Bell, CalendarDays, Copy, Flag, ListChecks, Moon, Pin, Repeat, Star, Tag, Timer, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ChecklistItem, Task, Visibility } from '../../shared/types.js';
 import { formatDeadline, formatShort } from '../../shared/dates.js';
@@ -9,6 +9,7 @@ import { checklist, deadline, isEvening, isFavorite, percentDone, priority, proj
 import { PriorityBadge, PrioritySelect } from './Priority';
 import { joinContent, newId, splitContent } from '../lib/task';
 import { showToast } from '../lib/toast';
+import { startFocus } from '../lib/focus';
 import { Checklist } from './Checklist';
 import { LinkedKnowledge } from './LinkedKnowledge';
 import { RecurrenceEditor } from './RecurrenceEditor';
@@ -141,6 +142,20 @@ export function TaskEditor({ task }: { task: Task }) {
           </button>
         )}
         <div className="ml-auto flex items-center gap-0.5 text-zinc-400">
+          {task.status !== 'done' && (
+            <button
+              type="button"
+              className="icon-btn"
+              title={t('focus.open')}
+              aria-label={t('focus.open')}
+              onClick={() => {
+                save();
+                startFocus(task, contentRef.current.title || initial.title);
+              }}
+            >
+              <Timer size={17} />
+            </button>
+          )}
           <button
             type="button"
             className="icon-btn"

@@ -164,6 +164,10 @@ how many tasks were completed today and the top three for tomorrow (on Sundays: 
 Task titles appear on the lock screen, so leave the evening digest off on a shared device and keep
 sensitive details out of task titles. Neither digest is sent when there is nothing to report.
 
+The focus timer sends one notification when its time is up, only to the device that started it, with the task title
+as text. The alarm is kept in memory: after a server restart a running timer still finishes in the app, but no
+notification arrives for it.
+
 ## Updating
 
 ```bash

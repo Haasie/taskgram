@@ -48,6 +48,12 @@ html, body {
   .btn {
     @apply rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800;
   }
+  .focus-btn {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-zinc-100 px-5 text-[15px] font-semibold text-zinc-700 active:scale-[0.98] dark:bg-zinc-800 dark:text-zinc-200;
+  }
+  .focus-btn-primary {
+    @apply bg-sky-500 text-white dark:bg-sky-500 dark:text-white;
+  }
   .btn-primary {
     @apply bg-sky-500 text-white hover:bg-sky-600 dark:hover:bg-sky-600;
   }

@@ -28,6 +28,10 @@ Taskgram only reads and writes tasks through the Postgram API.
   folder under `modules/`; see [docs/modules](docs/modules/README.md).
 - **Recurring tasks** — daily, weekly on chosen days, monthly, or N days/weeks after completion.
   Completing one creates exactly one next occurrence; undo removes it again.
+- **Focus timer** — start a visual countdown from any task (timer button, or `Shift+F`). It starts at the
+  Dagplanning estimate (else 25 minutes), shows one checklist step at a time, keeps the screen awake, survives a
+  reload and folds into a small pill. With push on, the device that started it gets a notification when time is
+  up, even when the phone is locked.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
   and synced automatically; real conflicts are shown instead of silently overwritten.
 - **Push notifications** — a morning digest with today's top three tasks, an optional evening digest
