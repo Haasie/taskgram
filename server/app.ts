@@ -8,6 +8,7 @@ import type { Config } from './config.js';
 import { UpstreamError, type PostgramClient } from './postgram.js';
 import { createApiRoutes } from './routes.js';
 import { createAuthApiRoutes, createOidcRoutes } from './auth/routes.js';
+import { createAiRoutes, createBreakdown, type Breakdown } from './ai.js';
 import { createPushRoutes } from './push/routes.js';
 import { createSender, type PushSender } from './push/sender.js';
 import { createPushStore, type PushStore } from './push/store.js';
@@ -18,7 +19,7 @@ import { MODULES } from './modules/discover.js';
 export function createApp(
   config: Config,
   pg: PostgramClient,
-  opts?: { now?: () => Date; pushStore?: PushStore; pushSender?: PushSender | null; moduleStore?: ModuleStore; moduleRuntime?: ModuleRuntime; moduleEnv?: Record<string, string | undefined> }
+  opts?: { now?: () => Date; pushStore?: PushStore; pushSender?: PushSender | null; moduleStore?: ModuleStore; moduleRuntime?: ModuleRuntime; moduleEnv?: Record<string, string | undefined>; env?: Record<string, string | undefined>; breakdown?: Breakdown | null }
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -84,6 +85,7 @@ export function createApp(
   app.use('/api/*', (c, next) => (c.req.path.startsWith('/api/auth/') ? next() : requireAuth(c, next)));
   app.route('/api', createApiRoutes(pg, { timeZone: config.appTimezone, ...(opts?.now ? { now: opts.now } : {}) }));
   app.route('/api/push', createPushRoutes({ config, store: pushStore, sender: pushSender }));
+  app.route('/api/ai', createAiRoutes({ breakdown: opts?.breakdown !== undefined ? opts.breakdown : createBreakdown(opts?.env ?? {}) }));
   app.route('/api/modules', createModuleRoutes(moduleRuntime));
   app.all('/api/*', (c) => c.json({ error: { code: 'NOT_FOUND', message: 'Unknown endpoint' } }, 404));
 

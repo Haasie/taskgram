@@ -451,4 +451,17 @@ export const en: Record<keyof typeof nl, string> = {
   'focus.pushHint': 'Turn on push notifications in Settings to get an alert when your phone is locked, too.',
   'focus.replace': 'A focus timer is already running for “{title}”. Replace it?',
   'shortcuts.focus': 'Focus timer',
+
+  // AI breakdown
+  'breakdown.open': 'Break into small steps',
+  'breakdown.title': 'Suggestion: small steps',
+  'breakdown.loading': 'Thinking of steps…',
+  'breakdown.failed': "That didn't work right now. Try again in a bit.",
+  'breakdown.offline': 'Breaking down only works online.',
+  'breakdown.keep': 'Keep step {step}',
+  'breakdown.add': 'Add ({n})',
+  'breakdown.again': 'Another suggestion',
+  'breakdown.cancel': 'Close',
+  'breakdown.privacy': 'Only the title goes to the AI, not your notes or checklist.',
+  'breakdown.added': '{n} steps added to the checklist',
 };

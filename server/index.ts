@@ -19,7 +19,7 @@ const moduleRuntime = createModuleRuntime({
   env: process.env,
   timeZone: config.appTimezone
 });
-const app = createApp(config, pg, { pushStore: store, pushSender: sender, moduleRuntime });
+const app = createApp(config, pg, { pushStore: store, pushSender: sender, moduleRuntime, env: process.env });
 moduleRuntime.start();
 
 if (config.push && sender) {
