@@ -183,6 +183,8 @@ describe('dagplanning: privé-agenda', () => {
     ]);
     expect(json.agenda.busy).toEqual({ work: 60, personal: 45 });
     expect(json.settings.capacity.normal).toEqual({ work: 240, personal: 45 });
+    // De tijdlijn heeft de werkdag nodig om werk en privé te scheiden.
+    expect(json.settings).toMatchObject({ workStart: '08:30', workEnd: '17:00' });
   });
 
   it('zonder agenda of als hij wegvalt, rekent de planning gewoon zonder', async () => {

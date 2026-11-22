@@ -65,6 +65,22 @@ separate tasks.
 - What was left over: *tomorrow*, *later* or *someday* per task, or leave it.
 - *Close the day*.
 
+**Timeline** (opens by default once today's plan is locked in, until 16:00)
+
+A Tiimo-style view of the rest of the day:
+
+- Timed events from the personal calendar sit at their times; all-day events are left out.
+- Planned open tasks fill the gaps **from now on**, in plan order, with the same duration as the meters
+  (estimate × correction; agent tasks count their attention time). A task is never split.
+- On a workday, work tasks only go inside *Workday starts/ends*; personal tasks go outside it. On a day set to *off*,
+  everything can go anywhere between 07:00 and 23:00.
+- A *Now* line, free gaps of 15 minutes or more, and past blocks dimmed. Block height follows duration (bounded).
+- Every task block has **▶ Focus** (opens Taskgram's focus timer at the block's duration) and **✓ Complete**. A
+  completed task moves to *Already done today* (with Undo) and the rest of the day reflows.
+- What no longer fits goes under *No longer fits today*, without colour or blame; the evening ritual handles it.
+
+The timeline is computed in the browser from the day view (`modules/dagplanning/timeline.ts`); nothing extra is stored.
+
 ## Estimates
 
 Each task gets `metadata.estimate_min` and `metadata.estimate_source` (`ai`, `rule` or `user`) the first time it shows

@@ -85,7 +85,20 @@ const nl = {
   agendaDown: 'Agenda niet bereikbaar; de planning rekent zonder afspraken.',
   agendaPartly: '{n} agenda(’s) niet bereikbaar.',
   agendaBusy: 'Afspraken nemen tijd af van: {parts}.',
-  allDay: 'Hele dag'
+  allDay: 'Hele dag',
+  timeline: 'Tijdlijn',
+  tlLede: 'Afspraken staan vast; je geplande taken vullen de gaten vanaf nu. Werk binnen je werkdag, privé erbuiten.',
+  tlNoPlan: 'Nog geen plan voor vandaag. Leg eerst in de ochtend vast wat je wilt doen.',
+  tlToMorning: 'Naar de ochtend',
+  tlNow: 'Nu {time}',
+  tlFree: 'Vrij · {dur}',
+  tlFocus: 'Focus',
+  tlFocusOn: 'Focus op {title} ({dur})',
+  tlOverflowH: 'Past vandaag niet meer',
+  tlOverflowLede: 'Geen probleem: dit schuift vanavond mee naar een andere dag.',
+  tlDoneH: 'Al af vandaag',
+  tlAllDone: 'Alles uit je plan is af. Mooi.',
+  tlEvent: 'Afspraak'
 };
 
 const en: typeof nl = {
@@ -172,7 +185,20 @@ const en: typeof nl = {
   agendaDown: 'Calendar unreachable; the plan counts without events.',
   agendaPartly: '{n} calendar(s) unreachable.',
   agendaBusy: 'Events take time off: {parts}.',
-  allDay: 'All day'
+  allDay: 'All day',
+  timeline: 'Timeline',
+  tlLede: 'Events are fixed; your planned tasks fill the gaps from now on. Work inside your workday, personal outside it.',
+  tlNoPlan: 'No plan for today yet. First lock in what you want to do in the morning.',
+  tlToMorning: 'To the morning',
+  tlNow: 'Now {time}',
+  tlFree: 'Free · {dur}',
+  tlFocus: 'Focus',
+  tlFocusOn: 'Focus on {title} ({dur})',
+  tlOverflowH: 'No longer fits today',
+  tlOverflowLede: 'No problem: tonight this moves to another day.',
+  tlDoneH: 'Already done today',
+  tlAllDone: 'Everything in your plan is done. Nice.',
+  tlEvent: 'Event'
 };
 
 type Key = keyof typeof nl;
