@@ -846,3 +846,43 @@ test('E30: Focustimer telt af, overleeft herladen en rondt de taak af @mobile', 
 
   await expect.poll(async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.OVERDUE_TASK)?.status).toBe('done');
 });
+
+test('E31: AI-opknipper stelt stapjes voor; alleen gekozen stappen komen in de checklist @mobile', async ({ page }, info) => {
+  // Geen echte AI in e2e: de server-API wordt in de browser nagebootst (de serverkant heeft eigen tests).
+  let sent: unknown = null;
+  await page.route('**/api/ai/status', (r) => r.fulfill({ json: { breakdown: true } }));
+  await page.route('**/api/ai/breakdown', async (r) => {
+    sent = r.request().postDataJSON();
+    await r.fulfill({ json: { steps: ['Open de map met bonnetjes', 'Pak de bovenste drie', 'Typ het eerste bedrag in'] } });
+  });
+
+  await page.goto('/#/inbox');
+  const row = page.locator(`[data-task-id="${FIXTURE_IDS.INBOX_TASK_1}"]`);
+  await row.getByText('Inbox taak 1').dblclick();
+  await row.getByRole('button', { name: 'Opknippen in stapjes' }).click();
+
+  const panel = page.getByRole('region', { name: 'Voorstel: kleine stapjes' });
+  await expect(panel.getByRole('checkbox', { name: 'Stap Pak de bovenste drie overnemen' })).toBeChecked();
+  expect(sent).toEqual({ title: 'Inbox taak 1', lang: 'nl' });
+  await page.screenshot({ path: info.outputPath('breakdown.png') });
+
+  await panel.getByRole('checkbox', { name: 'Stap Pak de bovenste drie overnemen' }).uncheck();
+  await panel.getByRole('button', { name: 'Toevoegen (2)' }).click();
+  await expect(panel).not.toBeVisible();
+  await expect(row.locator('input[placeholder="Item"]').first()).toHaveValue('Open de map met bonnetjes');
+
+  await expect
+    .poll(async () => {
+      const t = (await state()).entities.find((e) => e.id === FIXTURE_IDS.INBOX_TASK_1);
+      return (t?.metadata?.checklist as { text: string }[] | undefined)?.map((i) => i.text);
+    })
+    .toEqual(['Open de map met bonnetjes', 'Typ het eerste bedrag in']);
+});
+
+test('E32: zonder AI op de server is er geen opknipknop', async ({ page }) => {
+  await page.goto('/#/inbox');
+  const row = page.locator(`[data-task-id="${FIXTURE_IDS.INBOX_TASK_1}"]`);
+  await row.getByText('Inbox taak 1').dblclick();
+  await expect(row.getByRole('button', { name: 'Focustimer' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Opknippen in stapjes' })).toHaveCount(0);
+});

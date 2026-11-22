@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Copy, Flag, ListChecks, Moon, Pin, Repeat, Star, Tag, Timer, Trash2 } from 'lucide-react';
+import { Bell, CalendarDays, Copy, Flag, ListChecks, Moon, Pin, Repeat, Sparkles, Star, Tag, Timer, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ChecklistItem, Task, Visibility } from '../../shared/types.js';
 import { formatDeadline, formatShort } from '../../shared/dates.js';
@@ -10,6 +10,7 @@ import { PriorityBadge, PrioritySelect } from './Priority';
 import { joinContent, newId, splitContent } from '../lib/task';
 import { showToast } from '../lib/toast';
 import { startFocus } from '../lib/focus';
+import { BreakdownPanel, useBreakdownAvailable } from './BreakdownPanel';
 import { Checklist } from './Checklist';
 import { LinkedKnowledge } from './LinkedKnowledge';
 import { RecurrenceEditor } from './RecurrenceEditor';
@@ -34,6 +35,8 @@ export function TaskEditor({ task }: { task: Task }) {
   const [notes, setNotes] = useState(initial.notes);
   const [showTags, setShowTags] = useState(task.tags.length > 0);
   const [showRecurrence, setShowRecurrence] = useState(false);
+  const [breakdownFor, setBreakdownFor] = useState<string | null>(null);
+  const canBreakdown = useBreakdownAvailable() && task.status !== 'done';
   const [context, setContext] = useState(typeof task.metadata.context === 'string' ? task.metadata.context : '');
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
@@ -105,6 +108,18 @@ export function TaskEditor({ task }: { task: Task }) {
 
       {items.length > 0 && <Checklist items={items} onChange={setChecklist} />}
 
+      {breakdownFor && (
+        <BreakdownPanel
+          title={breakdownFor}
+          onClose={() => setBreakdownFor(null)}
+          onAdd={(steps) => {
+            setChecklist([...items.filter((i) => i.text.trim()), ...steps.map((text) => ({ id: newId(), text, done: false }))]);
+            setBreakdownFor(null);
+            showToast(t('breakdown.added', { n: steps.length }));
+          }}
+        />
+      )}
+
       {showTags && <TagEditor tags={task.tags} allTags={ui.allTags} onChange={(tags) => void updateTask(task, { tags })} />}
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -142,6 +157,22 @@ export function TaskEditor({ task }: { task: Task }) {
           </button>
         )}
         <div className="ml-auto flex items-center gap-0.5 text-zinc-400">
+          {canBreakdown && (
+            <button
+              type="button"
+              className="icon-btn"
+              title={t('breakdown.open')}
+              aria-label={t('breakdown.open')}
+              aria-pressed={!!breakdownFor}
+              onClick={() => {
+                save();
+                const current = contentRef.current.title.trim() || initial.title;
+                if (current) setBreakdownFor(breakdownFor ? null : current);
+              }}
+            >
+              <Sparkles size={17} className={breakdownFor ? 'text-violet-600' : ''} />
+            </button>
+          )}
           {task.status !== 'done' && (
             <button
               type="button"

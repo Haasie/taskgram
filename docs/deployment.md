@@ -12,6 +12,7 @@ your Postgram instance on your behalf. Your Postgram API key never reaches the b
   - [cosmos (Cosmos Cloud)](#cosmos)
   - [oidc (OpenID Connect)](#oidc)
 - [Push notifications](#push-notifications)
+- [AI (optional)](#ai-optional)
 - [Updating](#updating)
 - [Security notes](#security-notes)
 
@@ -167,6 +168,22 @@ sensitive details out of task titles. Neither digest is sent when there is nothi
 The focus timer sends one notification when its time is up, only to the device that started it, with the task title
 as text. The alarm is kept in memory: after a server restart a running timer still finishes in the app, but no
 notification arrives for it.
+
+## AI (optional)
+
+With a Mistral API key the task editor gets a **Break into small steps** button (✨). It sends only the task
+**title** to Mistral and suggests 3–7 small, concrete steps; nothing is added until you pick the steps and tap *Add*.
+Notes, checklists and context never leave the server. Without the key the button is hidden. The same key also powers
+the AI estimates of the Dagplanning module.
+
+| Variable | Description |
+| --- | --- |
+| `MISTRAL_API_KEY` | Enables AI features |
+| `BREAKDOWN_MODEL` | Model for breaking tasks down, default `DAGPLANNING_MODEL` or `mistral-small-latest` |
+| `MISTRAL_BASE_URL` | Default `https://api.mistral.ai/v1` |
+| `AI_BREAKDOWN` | `off` hides the button even when a key is set |
+
+At most 30 break-downs per hour are sent, as a brake on a runaway loop.
 
 ## Updating
 

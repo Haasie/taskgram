@@ -32,6 +32,9 @@ Taskgram only reads and writes tasks through the Postgram API.
   Dagplanning estimate (else 25 minutes), shows one checklist step at a time, keeps the screen awake, survives a
   reload and folds into a small pill. With push on, the device that started it gets a notification when time is
   up, even when the phone is locked.
+- **Break a task into small steps** — with a Mistral key, ✨ in the task editor suggests 3–7 tiny, concrete steps
+  (only the title is sent); pick the ones you want and they become the checklist. The focus timer then shows them one
+  at a time.
 - **Offline first** — the app and your tasks are cached on the device. Changes made offline are queued
   and synced automatically; real conflicts are shown instead of silently overwritten.
 - **Push notifications** — a morning digest with today's top three tasks, an optional evening digest
