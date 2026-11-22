@@ -166,11 +166,17 @@ export function useFocus(): FocusState | null {
 
 /**
  * Opent het instelscherm voor een taak. Loopt er al een timer voor een andere taak, dan eerst vragen;
- * voor dezelfde taak wordt de lopende timer gewoon weer groot.
+ * voor dezelfde taak wordt de lopende timer gewoon weer groot. `minutes` overschrijft de standaardduur
+ * (bijvoorbeeld de gecorrigeerde duur uit de dagtijdlijn).
  */
-export function startFocus(task: Task, title: string, confirm: (msg: string) => boolean = (m) => window.confirm(m)): void {
+export function startFocus(
+  task: Pick<Task, 'id' | 'metadata'>,
+  title: string,
+  opts: { minutes?: number; confirm?: (msg: string) => boolean } = {}
+): void {
+  const confirm = opts.confirm ?? ((m: string) => window.confirm(m));
   const s = getFocus();
   if (s && s.taskId === task.id) return setFocus({ ...s, minimized: false });
   if (s && s.phase !== 'setup' && !confirm(t('focus.replace', { title: s.title }))) return;
-  setFocus(setup(task.id, title || t('task.untitled'), defaultMinutes(task)));
+  setFocus(setup(task.id, title || t('task.untitled'), opts.minutes ?? defaultMinutes(task)));
 }

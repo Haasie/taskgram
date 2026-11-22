@@ -20,7 +20,7 @@
 .dp .dp-word { margin-left: auto; font: 600 12px/16px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--t); }
 .dp .dp-track { height: 10px; background: repeating-linear-gradient(90deg, var(--rule) 0 2px, transparent 2px 8px); border: 1px solid var(--rule-strong); }
 .dp .dp-track i { display: block; height: 100%; background: var(--t); }
-.dp .dp-agents.dp-over { color: var(--sev-critical); font-weight: 600; }
+.dp .dp-agents.dp-over { color: var(--accent); font-weight: 600; }
 .dp .dp-foot { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding-bottom: 32px; }
 .dp .dp-done { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; border-style: solid; }
 .dp .dp-done p { margin: 0; }
@@ -31,3 +31,26 @@
 /* De gedeelde vlag begint met "? " (voor "nog controleren"); hier is het een feit, geen vraag. */
 .dp .ld-flag::before { content: none; }
 .dp .dp-time { min-width: 92px; color: var(--ink-muted); }
+
+/* Tijdlijn: tijd · balk · inhoud · knoppen. Hoogte volgt de duur (begrensd); werk en privé verschillen in vorm én kleur. */
+.dp .dp-tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dp .dp-tl-row {
+  display: grid; grid-template-columns: 52px 6px minmax(0, 1fr) auto; gap: 4px 12px; align-items: start;
+  padding: 8px 12px 8px 0; border: 1.5px solid var(--rule-strong); background: var(--paper-raised);
+}
+.dp .dp-tl-time { padding-left: 10px; font-size: 12px; line-height: 16px; }
+.dp .dp-tl-bar { align-self: stretch; background: var(--gov); }
+.dp .dp-tl-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dp .dp-tl-personal .dp-tl-bar { background: repeating-linear-gradient(180deg, var(--accent) 0 8px, transparent 8px 12px); }
+.dp .dp-tl-event { background: var(--paper-sunken); border-style: dashed; }
+.dp .dp-tl-event .dp-tl-bar { background: var(--ink-faint); }
+.dp .dp-tl-free { border: none; background: none; padding-top: 2px; padding-bottom: 2px; align-items: center; }
+.dp .dp-tl-free .dp-tl-bar { background: repeating-linear-gradient(180deg, var(--rule) 0 2px, transparent 2px 6px); min-height: 20px; }
+.dp .dp-tl-past { opacity: 0.55; }
+.dp .dp-tl-now { display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 600; }
+.dp .dp-tl-now::after { content: ''; flex: 1; border-top: 2px solid var(--accent); }
+.dp .dp-tl-now span { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+@media (max-width: 560px) {
+  .dp .dp-tl-row { grid-template-columns: 48px 6px minmax(0, 1fr); }
+  .dp .dp-tl-row .ld-acts { grid-column: 3; justify-content: flex-start; }
+}

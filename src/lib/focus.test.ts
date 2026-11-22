@@ -109,10 +109,10 @@ describe('startFocus', () => {
     startFocus(task('a'), 'A');
     expect(getFocus()).toMatchObject({ taskId: 'a', phase: 'running', minimized: false });
 
-    startFocus(task('b'), 'B', () => false);
+    startFocus(task('b'), 'B', { confirm: () => false });
     expect(getFocus()!.taskId).toBe('a');
-    startFocus(task('b'), 'B', () => true);
-    expect(getFocus()).toMatchObject({ taskId: 'b', phase: 'setup', durationMs: 25 * MINUTE });
+    startFocus(task('b'), 'B', { confirm: () => true, minutes: 40 });
+    expect(getFocus()).toMatchObject({ taskId: 'b', phase: 'setup', durationMs: 40 * MINUTE });
     setFocus(null);
   });
 });

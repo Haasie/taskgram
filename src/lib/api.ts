@@ -95,6 +95,8 @@ export const api = {
   scheduleFocusPush: (body: { endpoint: string; endsAt: number; title: string; lang: 'nl' | 'en' }) =>
     request<{ scheduled: boolean }>('PUT', '/push/focus', body),
   cancelFocusPush: (endpoint: string) => request<{ ok: true }>('DELETE', '/push/focus', { endpoint }),
+  aiStatus: () => request<{ breakdown: boolean }>('GET', '/ai/status'),
+  breakdown: (title: string, lang: 'nl' | 'en') => request<{ steps: string[] }>('POST', '/ai/breakdown', { title, lang }),
   modules: () => request<ModulesInfo>('GET', '/modules'),
   setModuleEnabled: (id: string, enabled: boolean) =>
     request<{ modules: ModuleStates }>('PUT', `/modules/${id}`, { enabled }).then((r) => r.modules),

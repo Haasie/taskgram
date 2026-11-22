@@ -244,6 +244,8 @@ async function dayView(ctx: ModuleContext, day: string) {
     settings: {
       agentAttentionMinutes: s.agentAttentionMinutes,
       maxParallelAgents: s.maxParallelAgents,
+      workStart: s.workStart,
+      workEnd: s.workEnd,
       capacity: { normal: capacity(day, 'normal', s, agenda.busy), busy: capacity(day, 'busy', s, agenda.busy), off: capacity(day, 'off', s, agenda.busy) }
     },
     ai: s.aiEstimates && estimatorOf(ctx) !== null,

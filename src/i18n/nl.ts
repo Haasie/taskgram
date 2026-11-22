@@ -449,4 +449,17 @@ export const nl = {
   'focus.pushHint': 'Zet pushmeldingen aan in Instellingen, dan krijg je ook een melding als je telefoon op slot is.',
   'focus.replace': 'Er loopt al een focustimer voor “{title}”. Vervangen?',
   'shortcuts.focus': 'Focustimer',
+
+  // AI breakdown
+  'breakdown.open': 'Opknippen in stapjes',
+  'breakdown.title': 'Voorstel: kleine stapjes',
+  'breakdown.loading': 'Stapjes bedenken…',
+  'breakdown.failed': 'Dat lukt nu even niet. Probeer het straks opnieuw.',
+  'breakdown.offline': 'Opknippen werkt alleen online.',
+  'breakdown.keep': 'Stap {step} overnemen',
+  'breakdown.add': 'Toevoegen ({n})',
+  'breakdown.again': 'Ander voorstel',
+  'breakdown.cancel': 'Sluiten',
+  'breakdown.privacy': 'Alleen de titel gaat naar de AI, niet je notities of checklist.',
+  'breakdown.added': '{n} stapjes toegevoegd aan de checklist',
 } as const;

@@ -9,6 +9,8 @@ import type { Task } from '../../shared/types';
 import type { ModuleViewProps } from '../types';
 import { useT } from './i18n';
 import { fmtMinutes, levelOf, withKept, type Bucket, type Level, type WorkMode } from './logic';
+import { eventsFrom, fmtTime, layoutDay, toMin, type Block } from './timeline';
+import { startFocus } from '../../src/lib/focus';
 
 // Status altijd met vorm én woord, nooit alleen kleur.
 const MARK: Record<Level, string> = { room: '●', tight: '▲', over: '■' };
@@ -35,7 +37,7 @@ type Day = {
   suggested: string[] | null;
   workMode: WorkMode;
   factor: { factor: number; days: number; learned: boolean };
-  settings: { agentAttentionMinutes: number; maxParallelAgents: number; capacity: Record<WorkMode, Record<Bucket, number>> };
+  settings: { agentAttentionMinutes: number; maxParallelAgents: number; workStart: string; workEnd: string; capacity: Record<WorkMode, Record<Bucket, number>> };
   ai: boolean;
   aiStatus: 'on' | 'off-setting' | 'off-nokey' | 'cooling' | 'failed';
   aiReason?: string;
@@ -55,6 +57,8 @@ type Day = {
 };
 
 type I18n = ReturnType<typeof useT>;
+type Tab = 'morning' | 'timeline' | 'evening';
+const TABS: Tab[] = ['morning', 'timeline', 'evening'];
 type Section = 'leftovers' | 'today' | 'extra';
 
 /** Afronden en heropenen via de mutaties van de core (optimistisch, met outbox en conflictafhandeling). */
@@ -119,12 +123,12 @@ export default function DagplanningView({ today }: ModuleViewProps) {
   const { t } = i18n;
   const q = useQuery({ queryKey: dayKey(today), queryFn: () => request<Day>('GET', `/modules/dagplanning/day?date=${today}`) });
   const data = q.data;
-  const [tab, setTab] = useState<'morning' | 'evening' | null>(null);
-  // Standaard: avond zodra er een plan is en het na vieren is; anders ochtend.
-  // Eén keer bepaald bij het openen: wie na vieren zijn plan vastlegt, blijft in de ochtend en ziet de bevestiging.
-  const autoTab = useRef<'morning' | 'evening' | null>(null);
+  const [tab, setTab] = useState<Tab | null>(null);
+  // Standaard: met een open plan de tijdlijn, na vieren de avond; zonder plan de ochtend.
+  // Eén keer bepaald bij het openen: wie zijn plan vastlegt, blijft in de ochtend en ziet de bevestiging.
+  const autoTab = useRef<Tab | null>(null);
   if (data && autoTab.current === null) {
-    autoTab.current = data.plan && !data.plan.closed && new Date().getHours() >= 16 ? 'evening' : 'morning';
+    autoTab.current = data.plan && !data.plan.closed ? (new Date().getHours() >= 16 ? 'evening' : 'timeline') : 'morning';
   }
   const active = tab ?? autoTab.current ?? 'morning';
 
@@ -142,7 +146,7 @@ export default function DagplanningView({ today }: ModuleViewProps) {
               <p className="ld-sub">{new Date(`${today}T12:00:00`).toLocaleDateString(i18n.locale, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
             </div>
             <div className="ld-bar" role="tablist">
-              {(['morning', 'evening'] as const).map((k) => (
+              {TABS.map((k) => (
                 <button key={k} type="button" role="tab" aria-selected={active === k} className={`ld-btn ld-sm ${active === k ? '' : 'ld-sec'}`} onClick={() => setTab(k)}>
                   {t(k)}
                 </button>
@@ -159,6 +163,8 @@ export default function DagplanningView({ today }: ModuleViewProps) {
         ) : data ? (
           active === 'morning' ? (
             <Morning key={data.date} day={data} i18n={i18n} />
+          ) : active === 'timeline' ? (
+            <Timeline day={data} i18n={i18n} onPlan={() => setTab('morning')} />
           ) : (
             <Evening day={data} i18n={i18n} onPlan={() => setTab('morning')} />
           )
@@ -582,6 +588,185 @@ function Info({ it, done = false, minutes, attention, i18n }: { it: Item; done?:
         {it.split && <span className="ld-flag">{t('split', { n: it.slips })}</span>}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- tijdlijn
+
+const nowMinutes = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
+
+/** Hoogte van een blok: zichtbaar evenredig met de duur, maar nooit te klein om aan te tikken of te groot voor het scherm. */
+const heightOf = (min: number) => Math.round(Math.min(220, Math.max(52, min * 1.2)));
+
+function Timeline({ day, i18n, onPlan }: { day: Day; i18n: I18n; onPlan: () => void }) {
+  const { t, lang } = i18n;
+  const completion = useCompletion(day.date, i18n);
+  const [now, setNow] = useState(nowMinutes);
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowMinutes()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const minutes = (it: Item) => Math.round((it.agent ? day.settings.agentAttentionMinutes : it.estimate) * day.factor.factor);
+  const open = day.planned.filter((it) => !completion.isDone(it));
+  const done = day.planned.filter((it) => completion.isDone(it));
+  const byId = new Map(day.planned.map((it) => [it.id, it]));
+  const mode = day.plan?.workMode ?? day.workMode;
+  const layout = layoutDay({
+    now,
+    mode,
+    workStart: toMin(day.settings.workStart),
+    workEnd: toMin(day.settings.workEnd),
+    events: eventsFrom(day.agenda.items),
+    tasks: open.map((it) => ({ id: it.id, title: it.title, minutes: minutes(it), bucket: it.bucket }))
+  });
+
+  // De nu-lijn komt vóór het eerste blok dat nog niet voorbij is.
+  const nowAt = layout.blocks.findIndex((b) => b.end > now);
+  const nowRef = useRef<HTMLLIElement>(null);
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (scrolled.current || !nowRef.current) return;
+    scrolled.current = true;
+    nowRef.current.scrollIntoView?.({ block: 'center' });
+  });
+
+  if (!day.plan) {
+    return (
+      <main className="ld-main">
+        <section className="ld-section">
+          <p className="ld-empty">{t('tlNoPlan')}</p>
+          <button type="button" className="ld-btn" onClick={onPlan}>
+            {t('tlToMorning')}
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const nowLine = (
+    <li key="now" ref={nowRef} className="dp-tl-now" aria-label={t('tlNow', { time: fmtTime(now) })}>
+      <span className="ld-data">{t('tlNow', { time: fmtTime(now) })}</span>
+    </li>
+  );
+
+  const row = (b: Block) => {
+    const dur = b.end - b.start;
+    const past = b.end <= now;
+    const key = `${b.kind}-${b.start}-${b.kind === 'task' ? b.id : ''}`;
+    if (b.kind === 'free') {
+      return (
+        <li key={key} className="dp-tl-row dp-tl-free">
+          <span className="dp-tl-time ld-data">{fmtTime(b.start)}</span>
+          <span className="dp-tl-bar" aria-hidden="true" />
+          <span className="ld-meta">{t('tlFree', { dur: fmtMinutes(dur, lang) })}</span>
+        </li>
+      );
+    }
+    const it = b.kind === 'task' ? byId.get(b.id) : undefined;
+    return (
+      <li
+        key={key}
+        className={`dp-tl-row dp-tl-${b.kind === 'task' ? `task dp-tl-${b.bucket}` : 'event'} ${past ? 'dp-tl-past' : ''}`}
+        style={{ minHeight: heightOf(dur) }}
+      >
+        <span className="dp-tl-time ld-data">
+          {fmtTime(b.start)}
+          <br />
+          <span className="dp-src">{fmtTime(b.end)}</span>
+        </span>
+        <span className="dp-tl-bar" aria-hidden="true" />
+        <div className="dp-tl-body">
+          <span className="ld-title-static">{b.title || '…'}</span>
+          <div className="ld-meta">
+            <span className="ld-data">{fmtMinutes(dur, lang)}</span>
+            {b.kind === 'task' ? <span> · {t(`bucket_${b.bucket}`)}</span> : <span> · {t('tlEvent')} · {b.calendar}</span>}
+            {it?.agent && <span className="dp-agent">{t('agentBadge', { min: fmtMinutes(day.settings.agentAttentionMinutes, lang) })}</span>}
+          </div>
+        </div>
+        {b.kind === 'task' && it && (
+          <div className="ld-acts">
+            <button
+              type="button"
+              className="ld-btn ld-sec dp-act"
+              aria-label={t('tlFocusOn', { title: it.title, dur: fmtMinutes(dur, lang) })}
+              onClick={() => startFocus({ id: it.id, metadata: {} }, it.title, { minutes: dur })}
+            >
+              <span aria-hidden="true">▶ </span>
+              {t('tlFocus')}
+            </button>
+            <CompleteButton it={it} done={false} onComplete={() => completion.complete(it)} onReopen={() => void completion.reopen(it)} i18n={i18n} />
+          </div>
+        )}
+      </li>
+    );
+  };
+
+  return (
+    <main className="ld-main">
+      <section className="ld-section" aria-label={t('timeline')}>
+        <p className="ld-meta">{t('tlLede')}</p>
+        {completion.error && (
+          <p className="ld-meta ld-error" role="alert">
+            {completion.error}
+          </p>
+        )}
+        {open.length === 0 && done.length > 0 && <p className="ld-empty">{t('tlAllDone')}</p>}
+        <ol className="dp-tl">
+          {layout.blocks.map((b, i) => (i === nowAt ? [nowLine, row(b)] : row(b)))}
+          {nowAt < 0 && nowLine}
+        </ol>
+      </section>
+
+      {layout.overflow.length > 0 && (
+        <section className="ld-section" aria-label={t('tlOverflowH')}>
+          <div className="ld-sh">
+            <h2>{t('tlOverflowH')}</h2>
+          </div>
+          <p className="ld-meta">{t('tlOverflowLede')}</p>
+          <ul className="ld-list">
+            {layout.overflow.map((o) => {
+              const it = byId.get(o.id)!;
+              return (
+                <li key={o.id} className="ld-item dp-item">
+                  <span className="dp-tick" aria-hidden="true">
+                    ·
+                  </span>
+                  <Info it={it} minutes={o.minutes} attention={day.settings.agentAttentionMinutes} i18n={i18n} />
+                  <div className="ld-acts">
+                    <CompleteButton it={it} done={false} onComplete={() => completion.complete(it)} onReopen={() => void completion.reopen(it)} i18n={i18n} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {done.length > 0 && (
+        <section className="ld-section" aria-label={t('tlDoneH')}>
+          <div className="ld-sh">
+            <h2>{t('tlDoneH')}</h2>
+          </div>
+          <ul className="ld-list">
+            {done.map((it) => (
+              <li key={it.id} className="ld-item dp-item dp-isdone">
+                <span className="dp-tick" aria-hidden="true">
+                  ✓
+                </span>
+                <Info it={it} done minutes={minutes(it)} attention={day.settings.agentAttentionMinutes} i18n={i18n} />
+                <div className="ld-acts">
+                  <CompleteButton it={it} done onComplete={() => completion.complete(it)} onReopen={() => void completion.reopen(it)} i18n={i18n} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </main>
   );
 }
 

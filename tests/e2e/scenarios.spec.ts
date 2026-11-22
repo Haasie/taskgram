@@ -846,3 +846,87 @@ test('E30: Focustimer telt af, overleeft herladen en rondt de taak af @mobile', 
 
   await expect.poll(async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.OVERDUE_TASK)?.status).toBe('done');
 });
+
+test('E31: AI-opknipper stelt stapjes voor; alleen gekozen stappen komen in de checklist @mobile', async ({ page }, info) => {
+  // Geen echte AI in e2e: de server-API wordt in de browser nagebootst (de serverkant heeft eigen tests).
+  let sent: unknown = null;
+  await page.route('**/api/ai/status', (r) => r.fulfill({ json: { breakdown: true } }));
+  await page.route('**/api/ai/breakdown', async (r) => {
+    sent = r.request().postDataJSON();
+    await r.fulfill({ json: { steps: ['Open de map met bonnetjes', 'Pak de bovenste drie', 'Typ het eerste bedrag in'] } });
+  });
+
+  await page.goto('/#/inbox');
+  const row = page.locator(`[data-task-id="${FIXTURE_IDS.INBOX_TASK_1}"]`);
+  await row.getByText('Inbox taak 1').dblclick();
+  await row.getByRole('button', { name: 'Opknippen in stapjes' }).click();
+
+  const panel = page.getByRole('region', { name: 'Voorstel: kleine stapjes' });
+  await expect(panel.getByRole('checkbox', { name: 'Stap Pak de bovenste drie overnemen' })).toBeChecked();
+  expect(sent).toEqual({ title: 'Inbox taak 1', lang: 'nl' });
+  await page.screenshot({ path: info.outputPath('breakdown.png') });
+
+  await panel.getByRole('checkbox', { name: 'Stap Pak de bovenste drie overnemen' }).uncheck();
+  await panel.getByRole('button', { name: 'Toevoegen (2)' }).click();
+  await expect(panel).not.toBeVisible();
+  await expect(row.locator('input[placeholder="Item"]').first()).toHaveValue('Open de map met bonnetjes');
+
+  await expect
+    .poll(async () => {
+      const t = (await state()).entities.find((e) => e.id === FIXTURE_IDS.INBOX_TASK_1);
+      return (t?.metadata?.checklist as { text: string }[] | undefined)?.map((i) => i.text);
+    })
+    .toEqual(['Open de map met bonnetjes', 'Typ het eerste bedrag in']);
+});
+
+test('E32: zonder AI op de server is er geen opknipknop', async ({ page }) => {
+  await page.goto('/#/inbox');
+  const row = page.locator(`[data-task-id="${FIXTURE_IDS.INBOX_TASK_1}"]`);
+  await row.getByText('Inbox taak 1').dblclick();
+  await expect(row.getByRole('button', { name: 'Focustimer' })).toBeVisible();
+  await expect(row.getByRole('button', { name: 'Opknippen in stapjes' })).toHaveCount(0);
+});
+
+test('E33: Dagplanning-tijdlijn zet het plan op tijd, start focus op de blokduur en reflowt na afronden @mobile', async ({ page }, info) => {
+  const toggle = async (enabled: boolean) =>
+    expect((await page.request.put('/api/modules/dagplanning', { data: { enabled }, headers: { 'x-requested-with': 'taskgram' } })).ok()).toBe(true);
+  const today = new Date();
+  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  await page.clock.install({ time: new Date(`${iso}T09:00:00`) });
+  await toggle(true);
+  try {
+    await page.goto('/#/dagplanning');
+    await page.getByRole('button', { name: 'Plan vastleggen' }).click();
+    const ask = page.getByRole('alertdialog');
+    const saved = page.getByText('Plan staat. Begin met de bovenste.');
+    await expect(saved.or(ask)).toBeVisible();
+    if (await ask.isVisible()) await ask.getByRole('button', { name: 'Ja, bewust' }).click();
+    await expect(saved).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Tijdlijn' }).click();
+    const timeline = page.getByRole('region', { name: 'Tijdlijn' });
+    await expect(timeline.getByText(/^Nu \d\d:\d\d$/)).toBeVisible();
+    const focus = timeline.getByRole('button', { name: /^Focus op Achterstallige taak/ });
+    await expect(focus).toBeVisible();
+    await page.screenshot({ path: info.outputPath('timeline.png'), fullPage: true });
+
+    // Focus start op de duur van het blok (schatting × correctie), niet op de standaard 25 min.
+    const label = (await focus.getAttribute('aria-label')) ?? '';
+    // Label eindigt op de duur in de notatie van de module: "(45m)", "(1u)" of "(1u 30m)".
+    const [, h = '0', m = '0'] = label.match(/\((?:(\d+)u)?\s?(?:(\d+)m)?\)$/) ?? [];
+    const minutes = Number(h) * 60 + Number(m);
+    expect(minutes).toBeGreaterThan(0);
+    await focus.click();
+    const dialog = page.getByRole('dialog', { name: 'Focus' });
+    await expect(dialog.getByRole('radio', { name: new RegExp(`^${minutes} min`) })).toHaveAttribute('aria-checked', 'true');
+    await dialog.getByRole('button', { name: 'Stoppen' }).click();
+
+    // Afronden vanuit de tijdlijn: de taak verhuist naar "Al af vandaag" en is te heropenen.
+    await timeline.getByRole('button', { name: 'Afronden: Achterstallige taak' }).click();
+    const doneSection = page.getByRole('region', { name: 'Al af vandaag' });
+    await expect(doneSection.getByRole('button', { name: 'Heropenen: Achterstallige taak' })).toBeVisible();
+    await expect(timeline.getByRole('button', { name: /^Focus op Achterstallige taak/ })).toHaveCount(0);
+  } finally {
+    await toggle(false);
+  }
+});
