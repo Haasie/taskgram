@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth.js';
 import type { Config } from '../config.js';
 import { isAllowedPushEndpoint } from './allowlist.js';
+import { createFocusAlarms, type FocusAlarms } from './focus.js';
 import type { PushSender } from './sender.js';
 import type { PushStore } from './store.js';
 
@@ -35,6 +36,15 @@ const settingsBody = z
   })
   .strict();
 
+const focusBody = z
+  .object({
+    endpoint: z.string().max(2048),
+    endsAt: z.number().int().positive(),
+    title: z.string().max(200),
+    lang: z.enum(['nl', 'en']).optional()
+  })
+  .strict();
+
 const testBody = z
   .object({
     endpoint: z.string()
@@ -45,6 +55,7 @@ export type PushRoutesOpts = {
   config: Config;
   store: PushStore;
   sender?: PushSender | null;
+  focus?: FocusAlarms;
 };
 
 export function createPushRoutes(opts: PushRoutesOpts) {
@@ -93,6 +104,21 @@ export function createPushRoutes(opts: PushRoutesOpts) {
     const body = settingsBody.parse(await c.req.json());
     const settings = opts.store.updateSettings(body);
     return c.json({ settings });
+  });
+
+  // Focustimer: één push op het eindtijdstip naar dit apparaat. Zonder sender (tests) bestaat er geen alarm.
+  const focus = opts.focus ?? (opts.sender ? createFocusAlarms({ store: opts.store, sender: opts.sender }) : null);
+
+  routes.put('/focus', async (c) => {
+    const body = focusBody.parse(await c.req.json());
+    const scheduled = focus?.schedule({ endpoint: body.endpoint, endsAt: body.endsAt, title: body.title, lang: body.lang ?? 'nl' }) ?? false;
+    return c.json({ scheduled });
+  });
+
+  routes.delete('/focus', async (c) => {
+    const body = unsubscribeBody.parse(await c.req.json());
+    focus?.cancel(body.endpoint);
+    return c.json({ ok: true });
   });
 
   routes.post('/test', async (c) => {

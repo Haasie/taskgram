@@ -92,6 +92,9 @@ export const api = {
   savePushSettings: (settings: { digestEnabled?: boolean; digestTime?: string; eveningEnabled?: boolean; eveningTime?: string; language?: 'nl' | 'en' }) =>
     request<{ settings: { digestEnabled: boolean; digestTime: string; eveningEnabled?: boolean; eveningTime?: string; language?: 'nl' | 'en' } }>('PUT', '/push/settings', settings),
   testPush: (endpoint: string) => request<{ ok: true }>('POST', '/push/test', { endpoint }),
+  scheduleFocusPush: (body: { endpoint: string; endsAt: number; title: string; lang: 'nl' | 'en' }) =>
+    request<{ scheduled: boolean }>('PUT', '/push/focus', body),
+  cancelFocusPush: (endpoint: string) => request<{ ok: true }>('DELETE', '/push/focus', { endpoint }),
   modules: () => request<ModulesInfo>('GET', '/modules'),
   setModuleEnabled: (id: string, enabled: boolean) =>
     request<{ modules: ModuleStates }>('PUT', `/modules/${id}`, { enabled }).then((r) => r.modules),

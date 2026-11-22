@@ -808,3 +808,41 @@ test('E28: Dagplanning opent het ochtendritueel, toont capaciteit in woorden en 
     await toggle(false);
   }
 });
+
+test('E30: Focustimer telt af, overleeft herladen en rondt de taak af @mobile', async ({ page }, info) => {
+  await page.clock.install();
+  await page.goto('/#/today');
+  const row = page.locator(`[data-task-id="${FIXTURE_IDS.OVERDUE_TASK}"]`);
+  await row.getByText('Achterstallige taak').dblclick();
+  await row.getByRole('button', { name: 'Focustimer' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Focus' });
+  await expect(dialog.getByRole('heading', { name: 'Achterstallige taak' })).toBeVisible();
+  await expect(dialog.getByRole('radio', { name: '25 min' })).toHaveAttribute('aria-checked', 'true');
+  await dialog.getByRole('radio', { name: '10 min' }).click();
+  await expect(dialog.getByText('10:00')).toBeVisible();
+  await page.screenshot({ path: info.outputPath('focus-setup.png') });
+
+  await dialog.getByRole('button', { name: 'Start' }).click();
+  await page.waitForTimeout(300);
+  await page.clock.runFor('02:00');
+  await expect(dialog.getByText('08:00')).toBeVisible();
+  await page.screenshot({ path: info.outputPath('focus-running.png') });
+
+  // Inklappen: een pil met de resterende tijd; herladen houdt de timer vast.
+  await dialog.getByRole('button', { name: 'Verkleinen' }).click();
+  const pill = page.getByRole('button', { name: 'Focustimer openen' });
+  await expect(pill).toContainText('08:00');
+  await page.screenshot({ path: info.outputPath('focus-pill.png') });
+  await page.reload();
+  await expect(pill).toBeVisible();
+  await pill.click();
+
+  await page.clock.runFor('08:01');
+  await expect(dialog.getByText('Tijd is om')).toBeVisible();
+  await page.screenshot({ path: info.outputPath('focus-done.png') });
+  await dialog.getByRole('button', { name: 'Taak klaar' }).click();
+  await expect(dialog).not.toBeVisible();
+
+  await expect.poll(async () => (await state()).entities.find((e) => e.id === FIXTURE_IDS.OVERDUE_TASK)?.status).toBe('done');
+});
